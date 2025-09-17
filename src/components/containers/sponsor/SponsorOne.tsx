@@ -33,18 +33,17 @@ const SponsorOne = () => {
           effect="coverflow"
           grabCursor={true}
           centeredSlides={true}
-          slidesPerView={4} // show only 4 cards at once
+          slidesPerView={4} // show 4 cards at once
           loop={true}
-          loopAdditionalSlides={20}
           speed={4000}
           autoplay={{
             delay: 0,
             disableOnInteraction: false,
           }}
           coverflowEffect={{
-            rotate: 0,   // rotation angle
-            stretch: 0,   // spacing between cards
-            depth: 250,   // depth in 3D
+            rotate: 0,
+            stretch: 0,
+            depth: 250,
             modifier: 1,
             slideShadows: true,
           }}

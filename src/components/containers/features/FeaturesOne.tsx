@@ -1,9 +1,8 @@
 "use client";
+
 import React, { useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-
-// Swiper imports
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay } from "swiper";
 import "swiper/css";
@@ -33,10 +32,10 @@ const features = [
   },
 ];
 
-const FeaturesOne = () => {
-  const swiperRef = useRef(null);
+const FeaturesOne: React.FC = () => {
+  const swiperRef = useRef<any>(null);
 
-  const handleSlideChangeTransitionEnd = (swiper) => {
+  const handleSlideChangeTransitionEnd = (swiper: any) => {
     // Pause only when the active slide is centered
     if (swiper.autoplay) {
       swiper.autoplay.stop();
@@ -60,16 +59,14 @@ const FeaturesOne = () => {
 
         <Swiper
           ref={swiperRef}
-          slidesPerView={3}
-          spaceBetween={30}
+          slidesPerView={3.2}          // slightly more to show edges of next/prev cards
+          spaceBetween={20}           // smaller gap
           loop={true}
           centeredSlides={true}
           speed={5000} // smooth belt speed
-          freeMode={true}
-          freeModeMomentum={false}
           grabCursor={true}
           autoplay={{
-            delay: 0, // continuous
+            delay: 0,
             disableOnInteraction: false,
           }}
           onSlideChangeTransitionEnd={handleSlideChangeTransitionEnd}
