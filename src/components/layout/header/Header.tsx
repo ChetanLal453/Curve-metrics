@@ -120,7 +120,7 @@ const Header = () => {
                         </button>
                         <ul className={`sub-menu ${isSubMenuOpen("services")}`}>
                           <li>
-                            <Link href="/service">All Services</Link>
+                            <Link href="/service/services">All Services</Link>
                           </li>
                           <li>
                             <Link href="/service/seo">SEO Service</Link>

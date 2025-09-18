@@ -6,7 +6,7 @@ import HomeThreeFeatures from "@/components/containers/features/HomeThreeFeature
 import ServiceBoost from "@/components/containers/boost/ServiceBoost";
 import ServiceCta from "@/components/containers/cta/ServiceCta";
 
-const service = () => {
+const Service = () => {
   return (
     <Layout header={5} footer={5}>
       <Banner title="Services" />
@@ -18,4 +18,4 @@ const service = () => {
   );
 };
 
-export default service;
+export default Service;
