@@ -23,22 +23,11 @@ const HomeBannerOne = () => {
         <div className="container">
           <div className="row align-items-center">
             <div className="col-xl-7 col-lg-6">
-              <div className="hero__content-wrapper-3">
-                <div className="hero__filter">
-                  <form action="#">
-                    <div
-                      className="hero__filter-input "
-                      data-aos="fade-up"
-                      data-aos-delay="300"
-                    >
-                      <input
-                        type="text"
-                        placeholder="Enter Your Website Link"
-                      />
-                      <button type="submit">SUBSCRIBE NOW</button>
-                    </div>
-                  </form>
-                </div>
+              {/* ⬇️ Move this wrapper upward */}
+              <div
+                className="hero__content-wrapper-3"
+                style={{ position: "relative", top: "-90px" }}
+              >
                 <div className="hero__content-3 mb-60">
                   <h2 data-aos="fade-up" data-aos-delay="500">
                     <span style={{ display: "block", fontSize: "20px" }}>
@@ -46,7 +35,7 @@ const HomeBannerOne = () => {
                     </span>
                     SOFTWARE DEVELOPMENT
                   </h2>
-                  <p data-aos="fade-up" data-aos-delay="700">
+                  <p data-aos="fade-up" data-aos-delay="700" >
                     We transform business of most major sectors with powerful
                     and adaptable digital solutions that satisfy the needs of today.
                   </p>
