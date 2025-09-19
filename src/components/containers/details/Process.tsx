@@ -10,10 +10,11 @@ const SeoProcess = () => {
           Our Process
         </h2>
         <div className="container mx-auto">
+
           {/* 1. Website On-Page Analysis */}
           <div className="row align-items-center mb-16">
             <div className="col-md-7">
-              <h4 className="page-dual-title fade-in text-2xl lg:text-3xl mb-4">
+              <h4 className="page-dual-title text-2xl lg:text-3xl mb-4">
                 WEBSITE ON-PAGE ANALYSIS
               </h4>
               <p className="text-lg text-gray-700 mb-6">
@@ -21,7 +22,7 @@ const SeoProcess = () => {
                 your business, giving it a once-over might actually help. Here
                 are some benefits of on-page analysis.
               </p>
-              <ul className="list-unstyled space-y-6">
+              <ul className="list-unstyled space-y-4">
                 {[
                   {
                     title: "Content Improvement",
@@ -39,8 +40,8 @@ const SeoProcess = () => {
                     img: "https://www.digitalinfoways.com/wp-content/uploads/2020/12/Faster-Loading.png",
                   },
                 ].map((item, i) => (
-                  <li key={i} className="mb-6">
-                    <div className="row align-items-center">
+                  <li key={i} className="mb-4">
+                    <div className="row align-items-center g-3">
                       <div className="col-md-2 text-center">
                         <Image
                           src={item.img}
@@ -51,7 +52,7 @@ const SeoProcess = () => {
                         />
                       </div>
                       <div className="col-md-10">
-                        <p className="text-lg">
+                        <p className="text-lg leading-relaxed">
                           <strong>{item.title}</strong> – {item.desc}
                         </p>
                       </div>
@@ -66,7 +67,7 @@ const SeoProcess = () => {
                 alt="Website On-Page Analysis"
                 width={350}
                 height={350}
-                style={{ width: "100%", height: "auto", objectFit: "none" }}
+                style={{ width: "100%", height: "auto", objectFit: "contain" }}
               />
             </div>
           </div>
@@ -81,7 +82,7 @@ const SeoProcess = () => {
                 Keywords have a solid impact on the organic page rank of a
                 website. Ranking on top increases visibility and clicks.
               </p>
-              <ul className="list-unstyled space-y-6">
+              <ul className="list-unstyled space-y-4">
                 {[
                   {
                     title: "Audience Behavior",
@@ -99,8 +100,8 @@ const SeoProcess = () => {
                     img: "https://www.digitalinfoways.com/wp-content/uploads/2020/12/Quality-traffic.png",
                   },
                 ].map((item, i) => (
-                  <li key={i} className="mb-6">
-                    <div className="row align-items-center">
+                  <li key={i} className="mb-4">
+                    <div className="row align-items-center g-3">
                       <div className="col-md-2 text-center">
                         <Image
                           src={item.img}
@@ -111,7 +112,7 @@ const SeoProcess = () => {
                         />
                       </div>
                       <div className="col-md-10">
-                        <p className="text-lg">
+                        <p className="text-lg leading-relaxed">
                           <strong>{item.title}</strong> – {item.desc}
                         </p>
                       </div>
@@ -124,9 +125,9 @@ const SeoProcess = () => {
               <Image
                 src="https://www.digitalinfoways.com/wp-content/uploads/2020/12/02-img.png"
                 alt="Keyword Research"
-                width={400}
-                height={400}
-                style={{ width: "100%", height: "auto", objectFit: "none" }}
+                width={350}
+                height={350}
+                style={{ width: "100%", height: "auto", objectFit: "contain" }}
               />
             </div>
           </div>
@@ -141,7 +142,7 @@ const SeoProcess = () => {
                 Meta tags have a significant impact on SEO performance. They
                 help search engines understand your page content.
               </p>
-              <ul className="list-unstyled space-y-6">
+              <ul className="list-unstyled space-y-4">
                 {[
                   {
                     title: "Title Tag",
@@ -159,8 +160,8 @@ const SeoProcess = () => {
                     img: "https://www.digitalinfoways.com/wp-content/uploads/2020/12/Keyword-placement.png",
                   },
                 ].map((item, i) => (
-                  <li key={i} className="mb-6">
-                    <div className="row align-items-center">
+                  <li key={i} className="mb-4">
+                    <div className="row align-items-center g-3">
                       <div className="col-md-2 text-center">
                         <Image
                           src={item.img}
@@ -171,7 +172,7 @@ const SeoProcess = () => {
                         />
                       </div>
                       <div className="col-md-10">
-                        <p className="text-lg">
+                        <p className="text-lg leading-relaxed">
                           <strong>{item.title}</strong> – {item.desc}
                         </p>
                       </div>
@@ -186,7 +187,7 @@ const SeoProcess = () => {
                 alt="Meta Tag Optimization"
                 width={350}
                 height={350}
-                style={{ width: "100%", height: "auto", objectFit: "none" }}
+                style={{ width: "100%", height: "auto", objectFit: "contain" }}
               />
             </div>
           </div>
@@ -201,7 +202,7 @@ const SeoProcess = () => {
                 High-quality, optimized content helps increase organic traffic
                 and engagement.
               </p>
-              <ul className="list-unstyled space-y-6">
+              <ul className="list-unstyled space-y-4">
                 {[
                   {
                     title: "SEO-Friendly Writing",
@@ -219,8 +220,8 @@ const SeoProcess = () => {
                     img: "https://www.digitalinfoways.com/wp-content/uploads/2020/12/Keyword-integration.png",
                   },
                 ].map((item, i) => (
-                  <li key={i} className="mb-6">
-                    <div className="row align-items-center">
+                  <li key={i} className="mb-4">
+                    <div className="row align-items-center g-3">
                       <div className="col-md-2 text-center">
                         <Image
                           src={item.img}
@@ -231,7 +232,7 @@ const SeoProcess = () => {
                         />
                       </div>
                       <div className="col-md-10">
-                        <p className="text-lg">
+                        <p className="text-lg leading-relaxed">
                           <strong>{item.title}</strong> – {item.desc}
                         </p>
                       </div>
@@ -244,9 +245,9 @@ const SeoProcess = () => {
               <Image
                 src="https://www.digitalinfoways.com/wp-content/uploads/2020/12/04-img.png"
                 alt="Content Optimization"
-                width={400}
-                height={400}
-                style={{ width: "100%", height: "auto", objectFit: "none" }}
+                width={350}
+                height={350}
+                style={{ width: "100%", height: "auto", objectFit: "contain" }}
               />
             </div>
           </div>
@@ -261,7 +262,7 @@ const SeoProcess = () => {
                 An optimized website structure ensures better crawlability and
                 indexing by search engines.
               </p>
-              <ul className="list-unstyled space-y-6">
+              <ul className="list-unstyled space-y-4">
                 {[
                   {
                     title: "Internal Linking",
@@ -279,8 +280,8 @@ const SeoProcess = () => {
                     img: "https://www.digitalinfoways.com/wp-content/uploads/2020/12/Clean-url.png",
                   },
                 ].map((item, i) => (
-                  <li key={i} className="mb-6">
-                    <div className="row align-items-center">
+                  <li key={i} className="mb-4">
+                    <div className="row align-items-center g-3">
                       <div className="col-md-2 text-center">
                         <Image
                           src={item.img}
@@ -291,7 +292,7 @@ const SeoProcess = () => {
                         />
                       </div>
                       <div className="col-md-10">
-                        <p className="text-lg">
+                        <p className="text-lg leading-relaxed">
                           <strong>{item.title}</strong> – {item.desc}
                         </p>
                       </div>
@@ -306,7 +307,7 @@ const SeoProcess = () => {
                 alt="Website Structure Optimization"
                 width={350}
                 height={350}
-                style={{ width: "100%", height: "auto", objectFit: "none" }}
+                style={{ width: "100%", height: "auto", objectFit: "contain" }}
               />
             </div>
           </div>
@@ -321,7 +322,7 @@ const SeoProcess = () => {
                 Faster websites provide better user experiences and higher
                 search engine rankings.
               </p>
-              <ul className="list-unstyled space-y-6">
+              <ul className="list-unstyled space-y-4">
                 {[
                   {
                     title: "Image Optimization",
@@ -339,8 +340,8 @@ const SeoProcess = () => {
                     img: "https://www.digitalinfoways.com/wp-content/uploads/2020/12/Caching-strategy.png",
                   },
                 ].map((item, i) => (
-                  <li key={i} className="mb-6">
-                    <div className="row align-items-center">
+                  <li key={i} className="mb-4">
+                    <div className="row align-items-center g-3">
                       <div className="col-md-2 text-center">
                         <Image
                           src={item.img}
@@ -351,7 +352,7 @@ const SeoProcess = () => {
                         />
                       </div>
                       <div className="col-md-10">
-                        <p className="text-lg">
+                        <p className="text-lg leading-relaxed">
                           <strong>{item.title}</strong> – {item.desc}
                         </p>
                       </div>
@@ -364,12 +365,13 @@ const SeoProcess = () => {
               <Image
                 src="https://www.digitalinfoways.com/wp-content/uploads/2020/12/06-img.png"
                 alt="Page Load Time Optimization"
-                width={400}
-                height={400}
-                style={{ width: "100%", height: "auto", objectFit: "none" }}
+                width={350}
+                height={350}
+                style={{ width: "100%", height: "auto", objectFit: "contain" }}
               />
             </div>
           </div>
+
         </div>
       </section>
     </>
