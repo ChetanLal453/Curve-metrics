@@ -41,52 +41,58 @@ const ChooseTwo = () => {
   ];
 
   return (
-    <>
-      {/* Why Choose Us */}
-      <section id="our-work-sec" className="py-20 bg-white">
-        <div className="container mx-auto">
-          {/* Heading */}
-          <div className="text-center mb-12">
-            <h6 className="text-blue-600 font-semibold">WHY CHOOSE US</h6>
-            <h2 className="text-3xl font-bold uppercase mb-4 relative inline-block">
-              WHY CHOOSE US
-              <span className="block w-16 h-1 bg-blue-600 mx-auto mt-2"></span>
-            </h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Here at Digital Infoways, we offer these six values to our clients
-              which sets us apart from others.
-            </p>
-          </div>
+    <section id="our-work-sec" className="py-20 bg-white">
+      <div className="container">
+        {/* Heading */}
+        <div className="text-center mb-12">
+          <h6 className="text-blue-600 font-semibold">WHY CHOOSE US</h6>
+          <h2 className="text-3xl font-bold uppercase mb-4 relative inline-block">
+            WHY CHOOSE US
+            <span className="block w-16 h-1 bg-blue-600 mx-auto mt-2"></span>
+          </h2>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Here at Digital Infoways, we offer these six values to our clients
+            which sets us apart from others.
+          </p>
+        </div>
 
-          {/* Cards Grid */}
-          <div className="flex flex-wrap -mx-4">
-            {cards.map((card, index) => (
-              <div key={index} className="w-full md:w-1/2 px-4 mb-8">
-                <div
-                  className={`flex flex-col md:flex-row items-center bg-white border shadow p-6 rounded-lg ${
-                    index % 2 === 0 ? "md:flex-row" : "md:flex-row-reverse"
-                  }`}
-                >
+        {/* Cards Grid */}
+        <div className="row row-cols-1 row-cols-md-2 gx-2 gy-4">
+          {cards.map((card, index) => (
+            <div key={index} className="col">
+              <div
+                className="card mb-3 shadow-lg border-0"
+                style={{ maxWidth: "540px" }}
+              >
+                <div className="row g-0">
                   {/* Image */}
-                  <div className="flex-shrink-0">
+                  <div className="col-md-4 d-flex align-items-center justify-content-center p-3">
                     <img
                       src={card.img}
                       alt={card.title}
-                      className="w-20 h-20"
+                      className="img-fluid"
+                      style={{ maxHeight: "80px", objectFit: "contain" }}
                     />
                   </div>
                   {/* Text */}
-                  <div className="ml-0 md:ml-6 md:mr-6 mt-4 md:mt-0 text-center md:text-left">
-                    <h3 className="text-lg font-bold mb-2">{card.title}</h3>
-                    <p className="text-gray-600">{card.description}</p>
+                  <div className="col-md-8">
+                    <div className="card-body">
+                      <h5 className="card-title font-bold">{card.title}</h5>
+                      <p className="card-text text-gray-600">
+                        {card.description}
+                      </p>
+                      <p className="card-text">
+                        <small className="text-muted">Digital Infoways</small>
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-      </section>
-    </>
+      </div>
+    </section>
   );
 };
 
