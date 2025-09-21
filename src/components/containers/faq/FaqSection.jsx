@@ -80,6 +80,7 @@ const FaqSection = () => {
         </div>
       </section>
     </>
+    
   );
 };
 
