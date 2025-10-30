@@ -1,0 +1,19 @@
+  // Fetch page layout when pageId changes
+  useEffect(() => {
+    if (pageId) {
+      fetch(`/api/get-page-layout?page_id=${pageId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.layout) {
+            setLayout(data.layout)
+          }
+        })
+        .catch(error => {
+          console.error(
+Error
+fetching
+page
+layout:, error)
+        })
+    }
+  }, [pageId])
