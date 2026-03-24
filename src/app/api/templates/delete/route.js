@@ -1,43 +1,39 @@
-import pool from '../../../lib/db.js'
+import { NextResponse } from 'next/server'
+import pool from '../../../../lib/db.js'
+import { requireAdmin } from '../../../../lib/require-admin.js'
+import { databaseErrorResponse, missingTableResponse, tableExists } from '../../_utils/crud.js'
 
 export async function DELETE(request) {
+  const unauthorizedResponse = await requireAdmin()
+  if (unauthorizedResponse) {
+    return unauthorizedResponse
+  }
+
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
+
+  if (!id) {
+    return NextResponse.json({ success: false, error: 'Template ID is required' }, { status: 400 })
+  }
+
   try {
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
-
-    if (!id) {
-      return Response.json({
-        success: false,
-        error: 'Template ID is required'
-      }, { status: 400 })
+    if (!(await tableExists('custom_templates'))) {
+      return missingTableResponse('custom_templates')
     }
 
-    // Check if template exists
-    const [rows] = await pool.execute(
-      'SELECT id FROM custom_templates WHERE id = ?',
-      [id]
-    )
-
-    if (rows.length === 0) {
-      return Response.json({
-        success: false,
-        error: 'Template not found'
-      }, { status: 404 })
+    const [rows] = await pool.query('SELECT id FROM custom_templates WHERE id = ? LIMIT 1', [id])
+    if (!rows.length) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
     }
 
-    // Delete template
-    await pool.execute('DELETE FROM custom_templates WHERE id = ?', [id])
+    await pool.query('DELETE FROM custom_templates WHERE id = ?', [id])
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
-      message: 'Template deleted successfully'
+      data: { id },
+      message: 'Template deleted successfully',
     })
-
   } catch (error) {
-    console.error('Error deleting template:', error)
-    return Response.json({
-      success: false,
-      error: 'Failed to delete template'
-    }, { status: 500 })
+    return databaseErrorResponse(error)
   }
 }

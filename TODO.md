@@ -1,19 +1,29 @@
-# DynamicSlider Merge Task
+# Image Upload Failure Fixes - CRITICAL PRIORITY
 
-## Overview
-Merge three slider components (DynamicSlider.tsx, AdvancedSlider.tsx, DynamicSliderNew.tsx) into a single unified DynamicSlider.tsx component.
+## Root Causes Identified
+1. **Image Rendering Failure**: AdvancedCard's prop merging overwrites base64 images with defaults
+2. **PropertyPanel Reset**: Component selection lost during layout updates causes state reset
 
-## Tasks
-- [ ] Create unified DynamicSlider.tsx with all features combined
-- [ ] Implement grouped property panel schema (Slides, Layout, Animation, Navigation, Visibility, Style, Advanced)
-- [ ] Add complete defaultProps with 3 demo slides and global configuration
-- [ ] Ensure full reactivity with onUpdate for live editing
-- [ ] Maintain backward compatibility for old schema keys
-- [ ] Update componentRegistry.tsx to register only unified DynamicSlider
-- [ ] Remove old slider files (AdvancedSlider.tsx, DynamicSliderNew.tsx)
-- [ ] Test the unified component functionality
+## Fixes Needed
 
-## Current Status
-- Analyzed all three slider components
-- Plan approved by user
-- Ready to implement unified component
+### 1. AdvancedCard Image Rendering Fix
+- [ ] Remove mergedProps usage for image prop - use props.image directly
+- [ ] Ensure base64 data integrity is preserved through re-renders
+- [ ] Remove conflicting useEffect hooks that may interfere with image display
+
+### 2. PropertyPanel State Persistence Fix
+- [ ] Fix component selection sync in index-unified.tsx
+- [ ] Prevent unnecessary clearing of selectedComponent during updates
+- [ ] Ensure PropertyPanel localProps persist through layout updates
+
+### 3. Data Flow Integrity
+- [ ] Verify base64 upload process doesn't trigger premature re-renders
+- [ ] Ensure component ID stability during prop updates
+- [ ] Test complete upload → display → persist cycle
+
+## Testing Steps
+- [ ] Upload image in PropertyPanel
+- [ ] Verify image displays in AdvancedCard canvas immediately
+- [ ] Verify PropertyPanel doesn't reset/lose uploaded image
+- [ ] Test multiple uploads and prop changes
+- [ ] Verify base64 data integrity across re-renders

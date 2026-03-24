@@ -1,400 +1,187 @@
 'use client'
+
 import ComponentContainerCard from '@/components/ComponentContainerCard'
 import PageTitle from '@/components/PageTitle'
-import { GoogleApiWrapper } from 'google-maps-react'
-import { InfoWindow, Map, Marker, Polyline } from 'google-maps-react'
-import { useRef, useState } from 'react'
+import { GoogleMap, InfoWindow, LoadScript, Marker, Polyline } from '@react-google-maps/api'
+import { useMemo, useState } from 'react'
 import { Col, Row } from 'react-bootstrap'
 
-type MapContainerProps = {
-  google: any
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%',
+  position: 'relative' as const,
 }
 
-const BasicMap = ({ google }: MapContainerProps) => {
-  return (
-    <ComponentContainerCard title="Basic Google Map">
-      <div className="gmaps  position-relative">
-        <Map
-          google={google}
-          zoom={14}
-          initialCenter={{ lat: 21.569874, lng: 71.5893798 }}
-          style={{ width: '100%', height: '100%', position: 'relative' }}
-          zoomControlOptions={{
-            position: google.maps.ControlPosition.LEFT_TOP,
-          }}
-        />
-      </div>
-    </ComponentContainerCard>
-  )
-}
+const defaultCenter = { lat: 21.569874, lng: 71.5893798 }
+const streetViewCenter = { lat: 40.7295174, lng: -73.9986496 }
+const altCenter = { lat: -12.043333, lng: -77.028333 }
 
-const MapWithMarkers = ({ google }: MapContainerProps) => {
-  const [activeMarker, setActiveMarker] = useState<any>({})
-  const [selectedPlace, setSelectedPlace] = useState<any>({})
-  const [showingInfoWindow, setShowingInfoWindow] = useState<boolean>(false)
+type MarkerState = {
+  name: string
+  position: { lat: number; lng: number }
+} | null
 
-  const onInfoWindowClose = () => {
-    setActiveMarker(null)
-    setShowingInfoWindow(false)
-  }
+const mapLibraries: ('places' | 'geometry' | 'drawing' | 'visualization')[] = ['places']
 
-  // handles operation on marker click
-  const onBasicMarkerClick = () => {
-    alert('You clicked in this marker')
-  }
+const BasicMap = () => (
+  <ComponentContainerCard title="Basic Google Map">
+    <div className="gmaps position-relative">
+      <GoogleMap mapContainerStyle={mapContainerStyle} zoom={14} center={defaultCenter} options={{ zoomControl: true }} />
+    </div>
+  </ComponentContainerCard>
+)
 
-  // handles operation on marker click
-  const onMarkerClick = (props: unknown, marker: unknown) => {
-    setActiveMarker(marker)
-    setSelectedPlace(props)
-    setShowingInfoWindow(true)
-  }
+const MapWithMarkers = () => {
+  const [selectedMarker, setSelectedMarker] = useState<MarkerState>(null)
+
   return (
     <ComponentContainerCard title="Markers Google Map">
-      <div id="gmaps-markers" className="gmaps  position-relative">
-        <Map
-          google={google}
-          zoom={18}
-          initialCenter={{ lat: 21.569874, lng: 71.5893798 }}
-          style={{ width: '100%', height: '100%', position: 'relative' }}
-          zoomControlOptions={{
-            position: google.maps.ControlPosition.LEFT_TOP,
-          }}>
+      <div id="gmaps-markers" className="gmaps position-relative">
+        <GoogleMap mapContainerStyle={mapContainerStyle} zoom={18} center={defaultCenter} options={{ zoomControl: true }}>
+          <Marker position={defaultCenter} title="This is sweet home." onClick={() => alert('You clicked this marker')} />
           <Marker
-            title={'This is sweet home.'}
-            name={'Home sweet home!'}
-            position={{ lat: 21.569874, lng: 71.5893798 }}
-            onClick={onBasicMarkerClick}></Marker>
-
-          <Marker
-            name="Current location"
-            title={'Marker with InfoWindow'}
             position={{ lat: 21.56969, lng: 71.5893798 }}
-            onClick={onMarkerClick}></Marker>
-          <InfoWindow marker={activeMarker} onClose={onInfoWindowClose} visible={showingInfoWindow}>
-            <div>
-              <p>{selectedPlace.name}</p>
-            </div>
-          </InfoWindow>
-        </Map>
+            title="Marker with InfoWindow"
+            onClick={() => setSelectedMarker({ name: 'Current location', position: { lat: 21.56969, lng: 71.5893798 } })}
+          />
+          {selectedMarker && (
+            <InfoWindow position={selectedMarker.position} onCloseClick={() => setSelectedMarker(null)}>
+              <div>
+                <p className="mb-0">{selectedMarker.name}</p>
+              </div>
+            </InfoWindow>
+          )}
+        </GoogleMap>
       </div>
     </ComponentContainerCard>
   )
 }
 
-const StreetViewMap = ({ google }: MapContainerProps) => {
-  let mapRef: any = useRef()
-
-  /**
-   * Activate the street view
-   */
-  const activateStreetView = (position: { lat: number; lng: number }) => {
-    if (mapRef) {
-      const mapObj = mapRef.map.getStreetView()
-      mapObj.setPov({ heading: 34, pitch: 10 })
-      mapObj.setPosition(position)
-      mapObj.setVisible(true)
-    }
-  }
-  return (
-    <ComponentContainerCard title="Street View Panoramas Google Map">
+const StreetViewMap = () => (
+  <ComponentContainerCard title="Street View Panoramas Google Map">
       <div id="panorama" className="gmaps position-relative">
-        <Map
-          google={google}
-          ref={(map: unknown) => (mapRef = map)}
+        <GoogleMap
+          mapContainerStyle={mapContainerStyle}
           zoom={14}
-          initialCenter={{ lat: 40.7295174, lng: -73.9986496 }}
-          style={{ width: '100%', height: '100%', position: 'relative' }}
-          streetViewControl={true}
-          onReady={() => {
-            activateStreetView({ lat: 40.7295174, lng: -73.9986496 })
-          }}
+          center={streetViewCenter}
+          options={{ streetViewControl: true }}
         />
       </div>
     </ComponentContainerCard>
   )
-}
 
-const PolyLineMap = ({ google }: MapContainerProps) => {
+const PolyLineMap = () => {
   const polyline = [
     { lat: 37.789411, lng: -122.422116 },
     { lat: 37.785757, lng: -122.421333 },
     { lat: 37.789352, lng: -122.415346 },
   ]
+
   return (
     <ComponentContainerCard title="Google Map Types">
-      <div id="panorama" className="gmaps position-relative">
-        <Map
-          className="map"
-          google={google}
-          style={{ height: '100%', position: 'relative', width: '100%' }}
-          zoom={14}
-          zoomControlOptions={{
-            position: google.maps.ControlPosition.LEFT_TOP,
-          }}>
-          <Polyline fillColor="#0000FF" fillOpacity={0.35} path={polyline} strokeColor="#0000FF" strokeOpacity={0.8} strokeWeight={2} />
-        </Map>
+      <div id="polyline-map" className="gmaps position-relative">
+        <GoogleMap mapContainerStyle={mapContainerStyle} zoom={14} center={polyline[0]} options={{ zoomControl: true }}>
+          <Polyline path={polyline} options={{ strokeColor: '#0000FF', strokeOpacity: 0.8, strokeWeight: 2 }} />
+        </GoogleMap>
       </div>
     </ComponentContainerCard>
   )
 }
 
-const LightStyledMap = ({ google }: MapContainerProps) => {
-  const mapStyles = [
-    {
-      featureType: 'water',
-      elementType: 'geometry',
-      stylers: [{ color: '#e9e9e9' }, { lightness: 17 }],
-    },
-    {
-      featureType: 'landscape',
-      elementType: 'geometry',
-      stylers: [{ color: '#f5f5f5' }, { lightness: 20 }],
-    },
-    {
-      featureType: 'road.highway',
-      elementType: 'geometry.fill',
-      stylers: [{ color: '#ffffff' }, { lightness: 17 }],
-    },
-    {
-      featureType: 'road.highway',
-      elementType: 'geometry.stroke',
-      stylers: [{ color: '#ffffff' }, { lightness: 29 }, { weight: 0.2 }],
-    },
-    {
-      featureType: 'road.arterial',
-      elementType: 'geometry',
-      stylers: [{ color: '#ffffff' }, { lightness: 18 }],
-    },
-    {
-      featureType: 'road.local',
-      elementType: 'geometry',
-      stylers: [{ color: '#ffffff' }, { lightness: 16 }],
-    },
-    {
-      featureType: 'poi',
-      elementType: 'geometry',
-      stylers: [{ color: '#f5f5f5' }, { lightness: 21 }],
-    },
-    {
-      featureType: 'poi.park',
-      elementType: 'geometry',
-      stylers: [{ color: '#dedede' }, { lightness: 21 }],
-    },
-    {
-      elementType: 'labels.text.stroke',
-      stylers: [{ visibility: 'on' }, { color: '#ffffff' }, { lightness: 16 }],
-    },
-    {
-      elementType: 'labels.text.fill',
-      stylers: [{ saturation: 36 }, { color: '#333333' }, { lightness: 40 }],
-    },
-    { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-    {
-      featureType: 'transit',
-      elementType: 'geometry',
-      stylers: [{ color: '#f2f2f2' }, { lightness: 19 }],
-    },
-    {
-      featureType: 'administrative',
-      elementType: 'geometry.fill',
-      stylers: [{ color: '#fefefe' }, { lightness: 20 }],
-    },
-    {
-      featureType: 'administrative',
-      elementType: 'geometry.stroke',
-      stylers: [{ color: '#fefefe' }, { lightness: 17 }, { weight: 1.2 }],
-    },
-  ]
+const LightStyledMap = () => {
+  const mapStyles = useMemo(
+    () => [
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#e9e9e9' }, { lightness: 17 }] },
+      { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f5f5f5' }, { lightness: 20 }] },
+      { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#ffffff' }, { lightness: 17 }] },
+      { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#ffffff' }, { lightness: 18 }] },
+      { featureType: 'road.local', elementType: 'geometry', stylers: [{ color: '#ffffff' }, { lightness: 16 }] },
+      { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+    ],
+    [],
+  )
+
   return (
     <ComponentContainerCard title="Ultra Light with Labels">
-      <div id="panorama" className="gmaps position-relative">
-        <Map
-          google={google}
-          initialCenter={{ lat: -12.043333, lng: -77.028333 }}
-          style={{ width: '100%', height: '100%', position: 'relative' }}
-          styles={mapStyles}
-          zoomControlOptions={{
-            position: google.maps.ControlPosition.LEFT_TOP,
-          }}
-        />
+      <div id="light-map" className="gmaps position-relative">
+        <GoogleMap mapContainerStyle={mapContainerStyle} zoom={12} center={altCenter} options={{ styles: mapStyles }} />
       </div>
     </ComponentContainerCard>
   )
 }
 
-const DarkStyledMap = ({ google }: MapContainerProps) => {
-  const mapStyles = [
-    {
-      featureType: 'all',
-      elementType: 'labels',
-      stylers: [{ visibility: 'on' }],
-    },
-    {
-      featureType: 'all',
-      elementType: 'labels.text.fill',
-      stylers: [{ saturation: 36 }, { color: '#000000' }, { lightness: 40 }],
-    },
-    {
-      featureType: 'all',
-      elementType: 'labels.text.stroke',
-      stylers: [{ visibility: 'on' }, { color: '#000000' }, { lightness: 16 }],
-    },
-    {
-      featureType: 'all',
-      elementType: 'labels.icon',
-      stylers: [{ visibility: 'off' }],
-    },
-    {
-      featureType: 'administrative',
-      elementType: 'geometry.fill',
-      stylers: [{ color: '#000000' }, { lightness: 20 }],
-    },
-    {
-      featureType: 'administrative',
-      elementType: 'geometry.stroke',
-      stylers: [{ color: '#000000' }, { lightness: 17 }, { weight: 1.2 }],
-    },
-    {
-      featureType: 'administrative.country',
-      elementType: 'labels.text.fill',
-      stylers: [{ color: '#e5c163' }],
-    },
-    {
-      featureType: 'administrative.locality',
-      elementType: 'labels.text.fill',
-      stylers: [{ color: '#c4c4c4' }],
-    },
-    {
-      featureType: 'administrative.neighborhood',
-      elementType: 'labels.text.fill',
-      stylers: [{ color: '#e5c163' }],
-    },
-    {
-      featureType: 'landscape',
-      elementType: 'geometry',
-      stylers: [{ color: '#000000' }, { lightness: 20 }],
-    },
-    {
-      featureType: 'poi',
-      elementType: 'geometry',
-      stylers: [{ color: '#000000' }, { lightness: 21 }, { visibility: 'on' }],
-    },
-    {
-      featureType: 'poi.business',
-      elementType: 'geometry',
-      stylers: [{ visibility: 'on' }],
-    },
-    {
-      featureType: 'road.highway',
-      elementType: 'geometry.fill',
-      stylers: [{ color: '#e5c163' }, { lightness: '0' }],
-    },
-    {
-      featureType: 'road.highway',
-      elementType: 'geometry.stroke',
-      stylers: [{ visibility: 'off' }],
-    },
-    {
-      featureType: 'road.highway',
-      elementType: 'labels.text.fill',
-      stylers: [{ color: '#ffffff' }],
-    },
-    {
-      featureType: 'road.highway',
-      elementType: 'labels.text.stroke',
-      stylers: [{ color: '#e5c163' }],
-    },
-    {
-      featureType: 'road.arterial',
-      elementType: 'geometry',
-      stylers: [{ color: '#000000' }, { lightness: 18 }],
-    },
-    {
-      featureType: 'road.arterial',
-      elementType: 'geometry.fill',
-      stylers: [{ color: '#575757' }],
-    },
-    {
-      featureType: 'road.arterial',
-      elementType: 'labels.text.fill',
-      stylers: [{ color: '#ffffff' }],
-    },
-    {
-      featureType: 'road.arterial',
-      elementType: 'labels.text.stroke',
-      stylers: [{ color: '#2c2c2c' }],
-    },
-    {
-      featureType: 'road.local',
-      elementType: 'geometry',
-      stylers: [{ color: '#000000' }, { lightness: 16 }],
-    },
-    {
-      featureType: 'road.local',
-      elementType: 'labels.text.fill',
-      stylers: [{ color: '#999999' }],
-    },
-    {
-      featureType: 'transit',
-      elementType: 'geometry',
-      stylers: [{ color: '#000000' }, { lightness: 19 }],
-    },
-    {
-      featureType: 'water',
-      elementType: 'geometry',
-      stylers: [{ color: '#000000' }, { lightness: 17 }],
-    },
-  ]
+const DarkStyledMap = () => {
+  const mapStyles = useMemo(
+    () => [
+      { featureType: 'all', elementType: 'labels.text.fill', stylers: [{ color: '#ffffff' }] },
+      { featureType: 'all', elementType: 'labels.text.stroke', stylers: [{ color: '#000000' }] },
+      { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#000000' }] },
+      { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#e5c163' }] },
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#000000' }] },
+    ],
+    [],
+  )
+
   return (
     <ComponentContainerCard title="Dark">
-      <div id="panorama" className="gmaps position-relative">
-        <Map
-          google={google}
-          initialCenter={{ lat: -12.043333, lng: -77.028333 }}
-          style={{ width: '100%', height: '100%', position: 'relative' }}
-          styles={mapStyles}
-          zoomControlOptions={{
-            position: google.maps.ControlPosition.LEFT_TOP,
-          }}
-        />
+      <div id="dark-map" className="gmaps position-relative">
+        <GoogleMap mapContainerStyle={mapContainerStyle} zoom={12} center={altCenter} options={{ styles: mapStyles }} />
       </div>
     </ComponentContainerCard>
   )
 }
 
-const AllGoogleMaps = ({ google }: MapContainerProps) => {
+const MapsContent = () => (
+  <>
+    <PageTitle title="Google Maps" />
+    <Row>
+      <Col xl={6}>
+        <BasicMap />
+      </Col>
+      <Col xl={6}>
+        <MapWithMarkers />
+      </Col>
+    </Row>
+    <Row>
+      <Col xl={6}>
+        <StreetViewMap />
+      </Col>
+      <Col xl={6}>
+        <PolyLineMap />
+      </Col>
+    </Row>
+    <Row>
+      <Col xl={6}>
+        <LightStyledMap />
+      </Col>
+      <Col xl={6}>
+        <DarkStyledMap />
+      </Col>
+    </Row>
+  </>
+)
+
+const AllGoogleMaps = () => {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''
+
+  if (!apiKey) {
+    return (
+      <>
+        <PageTitle title="Google Maps" />
+        <ComponentContainerCard title="Google Maps Unavailable">
+          <div className="p-4 text-sm text-muted">
+            Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` to enable these examples.
+          </div>
+        </ComponentContainerCard>
+      </>
+    )
+  }
+
   return (
-    <>
-      <PageTitle title="Google Maps" />
-      <Row>
-        <Col xl={6}>
-          <BasicMap google={google} />
-        </Col>
-        <Col xl={6}>
-          <MapWithMarkers google={google} />
-        </Col>
-      </Row>
-      <Row>
-        <Col xl={6}>
-          <StreetViewMap google={google} />
-        </Col>
-        <Col xl={6}>
-          <PolyLineMap google={google} />
-        </Col>
-      </Row>
-      <Row>
-        <Col xl={6}>
-          <LightStyledMap google={google} />
-        </Col>
-        <Col xl={6}>
-          <DarkStyledMap google={google} />
-        </Col>
-      </Row>
-    </>
+    <LoadScript googleMapsApiKey={apiKey} libraries={mapLibraries}>
+      <MapsContent />
+    </LoadScript>
   )
 }
 
-export default GoogleApiWrapper({
-  apiKey: 'AIzaSyDsucrEdmswqYrw0f6ej3bf4M4suDeRgNA',
-})(AllGoogleMaps)
+export default AllGoogleMaps

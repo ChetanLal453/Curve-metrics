@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Page, Section, PageLayout } from '../types/page-editor';
+import { Page, PageLayout } from '../types/page-editor';
 
 interface UsePageDataReturn {
   pages: Page[];
@@ -56,18 +56,17 @@ export const usePageData = (initialPageId?: string): UsePageDataReturn => {
     }
   }, [currentPageId]);
 
-  // Load sections for a specific page
-  const loadPageSections = useCallback(async (pageId: string): Promise<Section[]> => {
+  const loadPageLayout = useCallback(async (pageId: string): Promise<PageLayout> => {
     try {
-      const response = await fetch(`/api/get-page-sections?pageId=${pageId}`);
+      const response = await fetch(`/api/get-page-layout?page_id=${pageId}`);
       const data = await response.json();
-      if (data.success) {
-        return data.sections || [];
+      if (data.success && data.layout) {
+        return data.layout;
       }
-      return [];
+      return { id: pageId, name: 'New Page', sections: [] };
     } catch (err) {
-      console.error('Error loading page sections:', err);
-      return [];
+      console.error('Error loading page layout:', err);
+      return { id: pageId, name: 'New Page', sections: [] };
     }
   }, []);
 
@@ -81,35 +80,28 @@ export const usePageData = (initialPageId?: string): UsePageDataReturn => {
 
     const page = pages.find(p => p.id === pageId);
     if (page) {
-      // Load sections if not already loaded
-      let sections = page.sections;
-      if (!sections || sections.length === 0) {
-        sections = await loadPageSections(pageId);
-        // Update the page in pages array
-        setPages(prevPages =>
-          prevPages.map(p => p.id === pageId ? { ...p, sections } : p)
-        );
-      }
-      setLayout({ id: page.id, name: page.name, sections });
+      const pageLayout = await loadPageLayout(pageId);
+      setPages(prevPages =>
+        prevPages.map(p => p.id === pageId ? { ...p, sections: pageLayout.sections || [] } : p)
+      );
+      setLayout(pageLayout);
     }
-  }, [pages, loadPageSections]);
+  }, [pages, loadPageLayout]);
 
   // Save layout (updates the current page's sections)
   const saveLayout = useCallback(async (newLayout: PageLayout): Promise<boolean> => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/save-page', {
+      const response = await fetch('/api/save-page-layout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newLayout, active: true }) // Assume active
+        body: JSON.stringify({ page_id: Number(newLayout.id), layout: newLayout })
       });
       const data = await response.json();
       if (data.success) {
         // Update the page in pages array
-        setPages(prevPages =>
-          prevPages.map(p => p.id === newLayout.id ? { ...p, sections: newLayout.sections } : p)
-        );
+        setPages(prevPages => prevPages.map(p => p.id === newLayout.id ? { ...p, sections: newLayout.sections } : p));
         return true;
       } else {
         setError('Failed to save layout');

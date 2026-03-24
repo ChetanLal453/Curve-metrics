@@ -1,12 +1,16 @@
-import pool from '../../../lib/db.js';
+import { createCollectionHandlers } from '../_utils/crud.js'
 
-export async function GET() {
-  try {
-    const [rows] = await pool.execute('SELECT address, phone, email, map_url FROM contact LIMIT 1');
-    if (rows.length === 0) return Response.json({});
-    return Response.json(rows[0]);
-  } catch (error) {
-    console.error(error);
-    return Response.json({});
-  }
-}
+const handlers = createCollectionHandlers({
+  tableName: 'contact',
+  listKey: 'submissions',
+  itemKey: 'submission',
+  selectColumns: ['id', 'name', 'email', 'phone', 'subject', 'message', 'status', 'created_at'],
+  createFields: ['name', 'email', 'phone', 'subject', 'message', 'status'],
+  requiredCreateFields: ['name', 'email', 'message'],
+  defaultCreateValues: { status: 'new' },
+  orderBy: 'created_at DESC, id DESC',
+  requireAdminForRead: true,
+})
+
+export const GET = handlers.GET
+export const POST = handlers.POST

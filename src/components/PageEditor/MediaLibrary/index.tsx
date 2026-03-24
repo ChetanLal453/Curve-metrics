@@ -40,7 +40,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
 
   const fetchMediaItems = async () => {
     try {
-      const response = await fetch('/api/media/list')
+      const response = await fetch('/api/media/list', { credentials: 'include' })
       const data = await response.json()
       if (data.success) {
         setMediaItems(data.media)
@@ -63,6 +63,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
     try {
       const response = await fetch('/api/media/upload', {
         method: 'POST',
+        credentials: 'include',
         body: formData
       })
 
@@ -81,7 +82,8 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   const handleDelete = async (mediaId: string) => {
     try {
       const response = await fetch(`/api/media/delete?id=${mediaId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: 'include'
       })
 
       const data = await response.json()
@@ -173,3 +175,5 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
 }
 
 export default MediaLibrary
+
+

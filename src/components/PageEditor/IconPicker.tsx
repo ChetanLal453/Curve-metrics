@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import SafeHtml from '@/components/SafeHtml'
+import { sanitizeSvgMarkup } from '@/lib/sanitize-markup'
 
 interface IconPickerProps {
   isOpen: boolean
@@ -22,6 +24,7 @@ const IconPicker: React.FC<IconPickerProps> = ({
   const [selectedLibrary, setSelectedLibrary] = useState(currentLibrary)
   const [customSvg, setCustomSvg] = useState('')
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const sanitizedCustomSvg = sanitizeSvgMarkup(customSvg)
 
   // FontAwesome icons (common ones)
   const faIcons = [
@@ -209,9 +212,9 @@ const IconPicker: React.FC<IconPickerProps> = ({
                     className="w-full h-32 px-3 py-2 border rounded focus:outline-none focus:border-blue-400 font-mono text-sm"
                   />
                 </div>
-                {customSvg && (
+                {sanitizedCustomSvg && (
                   <div className="flex justify-center p-4 border rounded bg-gray-50">
-                    <div dangerouslySetInnerHTML={{ __html: customSvg }} />
+                    <SafeHtml html={sanitizedCustomSvg} mode="svg" />
                   </div>
                 )}
               </div>
@@ -227,10 +230,11 @@ const IconPicker: React.FC<IconPickerProps> = ({
           >
             Cancel
           </button>
-          {activeTab === 'upload' && customSvg && (
+          {activeTab === 'upload' && sanitizedCustomSvg && (
             <button
               onClick={() => {
-                onUploadCustom(customSvg)
+                // Security: upload only sanitized SVG markup from the picker.
+                onUploadCustom(sanitizedCustomSvg)
                 onClose()
               }}
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"

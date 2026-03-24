@@ -25,33 +25,24 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const [activeTab, setActiveTab] = useState<'library' | 'structure'>('library')
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Tab Navigation */}
-      <div className="flex border-b border-slate-200 bg-white">
+    <div className="h-full flex flex-col bg-transparent text-[#eeeeff]">
+      <div className="lp-tabs">
         <button
           onClick={() => setActiveTab('library')}
-          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-            activeTab === 'library'
-              ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-              : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-          }`}
+          className={`lptab ${activeTab === 'library' ? 'active' : ''}`}
         >
           Components
         </button>
         <button
           onClick={() => setActiveTab('structure')}
-          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-            activeTab === 'structure'
-              ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-              : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-          }`}
+          className={`lptab ${activeTab === 'structure' ? 'active' : ''}`}
         >
           Structure
         </button>
       </div>
+      <div className="lp-div" />
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="lp-body">
         {activeTab === 'library' && (
           <ComponentLibrary onComponentSelect={onComponentAdd} />
         )}

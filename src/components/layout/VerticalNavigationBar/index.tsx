@@ -13,6 +13,11 @@ const VerticalNavigationBar = () => {
       <LogoBox />
 
       <SimplebarReactClient data-simplebar>
+        <div className="cm-admin-menu-meta">
+          <div className="cm-admin-menu-kicker">CurveMetrics CMS</div>
+          <div className="cm-admin-menu-title">Admin Workspace</div>
+          <div className="cm-admin-menu-copy">Navigation, pages, components, and content tools in one place.</div>
+        </div>
         <Suspense fallback={<FallbackLoading />}>
           <AppMenu menuItems={menuItems} />
         </Suspense>

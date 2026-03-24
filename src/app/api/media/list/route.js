@@ -1,52 +1,88 @@
-import pool from '../../../lib/db.js'
+import { NextResponse } from 'next/server'
+import pool from '../../../../lib/db.js'
+import { requireAdmin } from '../../../../lib/require-admin.js'
+import {
+  databaseErrorResponse,
+  missingTableResponse,
+  parseJsonRows,
+  parsePaginationParams,
+  tableExists,
+} from '../../_utils/crud.js'
+
+function safeParseInteger(value, fallback) {
+  const parsed = Number.parseInt(value ?? '', 10)
+  return Number.isNaN(parsed) ? fallback : parsed
+}
+
+function normalizeMediaRow(row) {
+  return {
+    id: row.id,
+    filename: row.filename || '',
+    original_filename: row.original_filename || row.filename || '',
+    url: row.url || '',
+    alt: row.alt || '',
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    uploaded_at: row.uploaded_at || null,
+  }
+}
 
 export async function GET(request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const search = searchParams.get('search') || ''
-    const type = searchParams.get('type') || ''
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
+  const unauthorizedResponse = await requireAdmin()
+  if (unauthorizedResponse) {
+    return unauthorizedResponse
+  }
 
-    let query = `
-      SELECT id, filename, original_filename, url, type, size, alt, tags, uploaded_at
+  const { searchParams } = new URL(request.url)
+  const search = searchParams.get('search') || ''
+  const pagination = parsePaginationParams(request, { defaultLimit: 50, maxLimit: 200 })
+  const limit = pagination.limit ?? safeParseInteger(searchParams.get('limit'), 50)
+  const offset = pagination.offset
+
+  try {
+    if (!(await tableExists('media_library'))) {
+      return missingTableResponse('media_library')
+    }
+
+    let fromClause = `
       FROM media_library
-      WHERE 1=1
+      WHERE 1 = 1
     `
-    const params = []
+    const values = []
 
     if (search) {
-      query += ' AND (original_filename LIKE ? OR alt LIKE ?)'
-      params.push(`%${search}%`, `%${search}%`)
+      fromClause += ' AND (COALESCE(filename, name) LIKE ? OR COALESCE(original_filename, original_name, name) LIKE ? OR alt LIKE ?)'
+      values.push(`%${search}%`, `%${search}%`, `%${search}%`)
     }
 
-    if (type) {
-      query += ' AND type LIKE ?'
-      params.push(`${type}%`)
-    }
+    const [countRows] = await pool.query(`SELECT COUNT(*) AS total ${fromClause}`, values)
 
-    query += ' ORDER BY uploaded_at DESC LIMIT ? OFFSET ?'
-    params.push(limit, offset)
+    let query = `
+      SELECT
+        id,
+        COALESCE(filename, name) AS filename,
+        COALESCE(original_filename, original_name, name) AS original_filename,
+        url,
+        alt,
+        tags,
+        uploaded_at
+      ${fromClause}
+    `
 
-    const [rows] = await pool.execute(query, params)
+    query += ' ORDER BY uploaded_at DESC, created_at DESC LIMIT ? OFFSET ?'
+    values.push(Math.max(limit, 1), Math.max(offset, 0))
 
-    // Parse tags JSON if needed
-    const media = rows.map(row => ({
-      ...row,
-      tags: row.tags ? (typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags) : []
-    }))
+    const [rows] = await pool.query(query, values)
+    const media = parseJsonRows(rows, ['tags']).map(normalizeMediaRow)
 
-    return Response.json({
+    return NextResponse.json({
       success: true,
+      data: media,
       media,
-      total: media.length
+      total: Number(countRows[0]?.total || 0),
+      limit,
+      offset,
     })
-
   } catch (error) {
-    console.error('Error fetching media:', error)
-    return Response.json({
-      success: false,
-      error: 'Failed to fetch media'
-    }, { status: 500 })
+    return databaseErrorResponse(error)
   }
 }

@@ -1,11 +1,15 @@
-import pool from '../../../lib/db.js';
+import { createCollectionHandlers } from '../_utils/crud.js'
 
-export async function GET() {
-  try {
-    const [rows] = await pool.execute('SELECT label, value FROM stats ORDER BY sort_order');
-    return Response.json(rows);
-  } catch (error) {
-    console.error(error);
-    return Response.json([]);
-  }
-}
+const handlers = createCollectionHandlers({
+  tableName: 'stats',
+  listKey: 'stats',
+  itemKey: 'stat',
+  selectColumns: ['id', 'label', 'value', 'icon', 'order_index', 'created_at'],
+  createFields: ['label', 'value', 'icon', 'order_index'],
+  requiredCreateFields: ['label', 'value'],
+  orderBy: 'order_index ASC, id ASC',
+  requireAdminForWrite: true,
+})
+
+export const GET = handlers.GET
+export const POST = handlers.POST

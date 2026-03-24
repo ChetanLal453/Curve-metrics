@@ -1,7 +1,6 @@
 'use client'
 
 import AuthLogo from '@/components/AuthLogo'
-import { Metadata } from 'next'
 import Image from 'next/image'
 import { Card, Col, Container, Row, Button } from 'react-bootstrap'
 import Link from 'next/link'
@@ -9,8 +8,6 @@ import { signOut } from 'next-auth/react'
 
 import authImg from '@/assets/images/auth-img.jpg'
 import logoutImg from '@/assets/images/svg/logout.svg'
-
-export const metadata: Metadata = { title: 'Logout' }
 
 const Logout = () => {
   return (

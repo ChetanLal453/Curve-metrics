@@ -1,5 +1,4 @@
 'use client'
-import type { DropResult } from '@hello-pangea/dnd'
 import { yupResolver } from '@hookform/resolvers/yup'
 import { createContext, startTransition, use, useCallback, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -17,7 +16,7 @@ const ThemeContext = createContext<KanbanType | undefined>(undefined)
 export const kanbanTaskSchema = yup.object({
   title: yup.string().required('Please enter project title'),
   description: yup.string().required('Please enter project description'),
-  totalTasks: yup.number().required('Please enter number of tasks'),
+  progress: yup.number().nullable().transform((value, originalValue) => (originalValue === '' ? null : value)),
 })
 
 export type TaskFormFields = yup.InferType<typeof kanbanTaskSchema>
@@ -72,11 +71,9 @@ const KanbanProvider = ({ children }: ChildrenType) => {
     newTaskReset({
       title: undefined,
       description: undefined,
-      // priority: undefined,
-      // tags: undefined,
-      totalTasks: undefined,
+      progress: null,
     })
-  }, [])
+  }, [newTaskReset])
 
   const toggleNewTaskModal = (sectionId?: KanbanSectionType['id'], taskId?: KanbanTaskType['id']) => {
     if (sectionId) setActiveSectionId(sectionId)
@@ -86,9 +83,7 @@ const KanbanProvider = ({ children }: ChildrenType) => {
         newTaskReset({
           title: foundTask.title,
           description: foundTask.description,
-          // priority: foundTask.priority,
-          // totalTasks: foundTask.totalTasks,
-          // tags: foundTask.tags ? foundTask.tags[0] : 'API',
+          progress: foundTask.progress ?? null,
         })
         startTransition(() => {
           setActiveTaskId(taskId)
@@ -136,23 +131,21 @@ const KanbanProvider = ({ children }: ChildrenType) => {
     const formData: TaskFormFields = {
       title: values.title,
       description: values.description,
-      // priority: values.priority,
-      // tags: values.tags,
-      totalTasks: values.totalTasks,
+      progress: values.progress ?? null,
     }
 
     if (activeSectionId) {
       const newTask: KanbanTaskType = {
-        ...formData,
-        // tags: [formData.tags],
         sectionId: activeSectionId,
         id: Number(tasks.slice(-1)[0].id) + 1 + '',
         views: 0,
         members: [avatar1],
         share: 10,
         variant: 'success',
-        // completedTasks: 0,
         commentsCount: 0,
+        title: formData.title,
+        description: formData.description,
+        ...(formData.progress != null ? { progress: formData.progress } : {}),
       }
       setTasks([...tasks, newTask])
     }
@@ -167,23 +160,21 @@ const KanbanProvider = ({ children }: ChildrenType) => {
     const formData: TaskFormFields = {
       title: values.title,
       description: values.description,
-      // priority: values.priority,
-      // tags: values.tags,
-      totalTasks: values.totalTasks,
+      progress: values.progress ?? null,
     }
 
     if (activeSectionId && activeTaskId) {
       const newTask: KanbanTaskType = {
-        ...formData,
         views: 0,
         members: [avatar1],
         share: 10,
         variant: 'success',
-        // tags: [formData.tags],
         sectionId: activeSectionId,
         id: activeTaskId,
-        // completedTasks: 0,
         commentsCount: 0,
+        title: formData.title,
+        description: formData.description,
+        ...(formData.progress != null ? { progress: formData.progress } : {}),
       }
       setTasks(tasks.map((t) => (t.id === activeTaskId ? newTask : t)))
     }
@@ -205,43 +196,13 @@ const KanbanProvider = ({ children }: ChildrenType) => {
     setTasks(tasks.filter((task) => task.id !== taskId))
   }
 
-  const onDragEnd = (result: DropResult) => {
-    const { source, destination } = result
-
-    if (!destination) {
-      return
-    }
-    let sourceOccurrence = source.index
-    let destinationOccurrence = destination.index
-
-    let sourceId = 0,
-      destinationId = 0
-
-    tasks.forEach((task, index) => {
-      if (task.sectionId == source.droppableId) {
-        if (sourceOccurrence == 0) {
-          sourceId = index
-        }
-        sourceOccurrence--
-      }
-      if (task.sectionId == destination.droppableId) {
-        if (destinationOccurrence == 0) {
-          destinationId = index
-        }
-        destinationOccurrence--
-      }
-    })
-
-    const task = tasks[sourceId]
-    const newTasks = tasks.filter((t) => t.id != task.id)
-    task.sectionId = destination.droppableId
-    const parity = destination.droppableId != source.droppableId ? -1 : 0
-    setTasks([...newTasks.slice(0, destinationId + parity), task, ...newTasks.slice(destinationId + parity)])
+  // Remove the onDragEnd function since we're not using react-beautiful-dnd anymore
+  const handleDragEnd = () => {
+    // This will be implemented with @dnd-kit if needed
   }
 
   const handleNewSection = sectionHandleSubmit((values: SectionFormFields) => {
     const section: KanbanSectionType = {
-      // TODO test, test when array is empty
       id: Number(sections.slice(-1)[0].id) + 1 + '',
       title: values.sectionTitle,
     }
@@ -303,7 +264,7 @@ const KanbanProvider = ({ children }: ChildrenType) => {
             deleteRecord: handleDeleteSection,
           },
           getAllTasksPerSection,
-          onDragEnd,
+          onDragEnd: handleDragEnd, // Updated to use new function
         }),
         [sections, tasks, activeSectionId, taskFormData, sectionFormData, dialogStates],
       )}>

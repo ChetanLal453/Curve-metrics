@@ -25,6 +25,15 @@ const nextConfig = {
     }
     return config
   },
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/page-editor',
+        permanent: true,
+      },
+    ]
+  },
 }
 
 export default nextConfig

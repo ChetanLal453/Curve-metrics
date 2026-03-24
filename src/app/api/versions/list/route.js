@@ -1,32 +1,84 @@
-import pool from '../../../lib/db.js'
+import { NextResponse } from 'next/server'
+import pool from '../../../../lib/db.js'
+import { requireAdmin } from '../../../../lib/require-admin.js'
+import {
+  databaseErrorResponse,
+  missingTableResponse,
+  parseJsonRows,
+  parsePaginationParams,
+  tableExists,
+} from '../../_utils/crud.js'
+
+function normalizeVersionRow(row) {
+  return {
+    id: row.id,
+    page_id: row.page_id,
+    version_name: row.version_name || `Version ${row.version_number || 1}`,
+    version_number: Number(row.version_number || 1),
+    layout: row.layout || row.content || {},
+    description: row.description || row.notes || '',
+    created_by: row.created_by || null,
+    created_at: row.created_at || null,
+  }
+}
 
 export async function GET(request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const pageId = searchParams.get('page_id')
+  const unauthorizedResponse = await requireAdmin()
+  if (unauthorizedResponse) {
+    return unauthorizedResponse
+  }
 
-    if (!pageId) {
-      return Response.json({
-        success: false,
-        error: 'page_id is required'
-      }, { status: 400 })
+  const { searchParams } = new URL(request.url)
+  const pageId = searchParams.get('page_id')
+
+  if (!pageId) {
+    return NextResponse.json({ success: false, error: 'page_id is required' }, { status: 400 })
+  }
+
+  try {
+    if (!(await tableExists('page_versions'))) {
+      return missingTableResponse('page_versions')
     }
 
-    const [rows] = await pool.execute(
-      'SELECT id, page_id, version_number, name, description, created_by, created_at FROM page_versions WHERE page_id = ? ORDER BY version_number DESC',
-      [pageId]
+    const { limit, offset, applyPagination } = parsePaginationParams(request, { defaultLimit: 50, maxLimit: 200 })
+    const [countRows] = await pool.query('SELECT COUNT(*) AS total FROM page_versions WHERE page_id = ?', [pageId])
+    const values = [pageId]
+    let query = `SELECT
+      id,
+      page_id,
+      version_name,
+      version_number,
+      content,
+      layout,
+      description,
+      notes,
+      created_by,
+      created_at
+    FROM page_versions
+    WHERE page_id = ?
+    ORDER BY version_number DESC, created_at DESC`
+
+    if (applyPagination && limit !== null) {
+      query += ' LIMIT ? OFFSET ?'
+      values.push(limit, offset)
+    }
+
+    const [rows] = await pool.query(
+      query,
+      values,
     )
 
-    return Response.json({
-      success: true,
-      versions: rows
-    })
+    const versions = parseJsonRows(rows, ['content', 'layout']).map(normalizeVersionRow)
 
+    return NextResponse.json({
+      success: true,
+      data: versions,
+      versions,
+      total: Number(countRows[0]?.total || 0),
+      limit,
+      offset,
+    })
   } catch (error) {
-    console.error('Error fetching versions:', error)
-    return Response.json({
-      success: false,
-      error: 'Failed to fetch versions'
-    }, { status: 500 })
+    return databaseErrorResponse(error)
   }
 }

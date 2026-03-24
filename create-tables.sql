@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS pages (
   slug VARCHAR(255) UNIQUE NOT NULL,
   title VARCHAR(255) NOT NULL,
   content JSON,
+  published_layout JSON,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS sections (
   `order` INT DEFAULT 0,
   enabled BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_sections_page_id (page_id),
   FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE,
   FOREIGN KEY (template_id) REFERENCES section_templates(id) ON DELETE SET NULL
 );
@@ -100,10 +102,16 @@ CREATE TABLE IF NOT EXISTS media_library (
   id VARCHAR(36) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   original_name VARCHAR(255) NOT NULL,
+  filename VARCHAR(255),
+  original_filename VARCHAR(255),
   url VARCHAR(500) NOT NULL,
   type VARCHAR(100) NOT NULL,
   size INT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  alt VARCHAR(255),
+  tags JSON,
+  uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Custom Templates table
@@ -123,8 +131,13 @@ CREATE TABLE IF NOT EXISTS page_versions (
   page_id INT NOT NULL,
   version_name VARCHAR(255),
   content JSON NOT NULL,
+  layout JSON NOT NULL,
+  version_number INT DEFAULT 1,
+  description TEXT,
+  created_by VARCHAR(255),
   notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_page_versions_page_id (page_id),
   FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE
 );
 
@@ -242,3 +255,4 @@ INSERT INTO choose (title, description, icon, color) VALUES
 INSERT INTO sections (page_id, template_id, section_type, content, `order`) VALUES
 (1, 1, 'home_banner', '{"title": "Welcome to Home", "subtitle": "Home banner", "backgroundColor": "#e0e0e0"}', 0),
 (1, 2, 'slider', '{"slides": [{"image": "/images/home-slide1.jpg", "title": "Home Slide 1", "description": "Home desc 1"}]}', 1);
+

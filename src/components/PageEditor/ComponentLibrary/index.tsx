@@ -1,32 +1,36 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
+import { useDroppable } from '@dnd-kit/core'
 import { componentRegistry } from '@/lib/componentRegistry'
 import { ComponentDefinition } from '@/types/page-editor'
 import { ComponentCategories } from './ComponentCategories'
 
 interface ComponentLibraryProps {
-  onComponentSelect?: (component: ComponentDefinition) => void;
+  onComponentSelect?: (component: ComponentDefinition) => void
 }
 
-export const ComponentLibrary: React.FC<ComponentLibraryProps> = ({
-  onComponentSelect,
-}) => {
+export const ComponentLibrary: React.FC<ComponentLibraryProps> = ({ onComponentSelect }) => {
+  const [query, setQuery] = useState('')
   const categories = componentRegistry.getCategories()
 
+  const { setNodeRef } = useDroppable({
+    id: 'component-library',
+    data: {
+      type: 'component-library',
+    },
+  })
+
   return (
-    <div className="h-full flex flex-col bg-white border-r border-gray-200 shadow-sm">
-      {/* Header */}
-      <div className="p-2 border-b border-gray-200">
-        <h2 className="text-sm font-semibold text-gray-900">Component Library</h2>
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="lp-srch">
+        <input type="text" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components..." />
       </div>
 
-      {/* Categories */}
       <div className="flex-1 overflow-y-auto">
-        <ComponentCategories
-          categories={categories}
-          onComponentSelect={onComponentSelect}
-        />
+        <div ref={setNodeRef} className="h-full">
+          <ComponentCategories categories={categories} query={query} onComponentSelect={onComponentSelect} />
+        </div>
       </div>
     </div>
   )

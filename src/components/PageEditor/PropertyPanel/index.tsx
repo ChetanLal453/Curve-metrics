@@ -1,269 +1,573 @@
 'use client'
 
-import React, { useState } from 'react'
-import toast from 'react-hot-toast'
-import { LayoutComponent, ComponentDefinition } from '@/types/page-editor'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LayoutComponent, PageLayout, Section } from '@/types/page-editor'
 import { componentRegistry } from '@/lib/componentRegistry'
 import { PropertyField } from './PropertyField'
-import { StylePanel } from '../StylePanel'
-import { CustomCSS } from '../CustomCSS'
+import { SectionProperties } from '@/components/PageEditor/components/SectionProperties'
 
 interface PropertyPanelProps {
   selectedComponent?: {
-    sectionId: string;
-    containerId: string;
-    rowId: string;
-    colId: string;
-    compId: string;
-    component: LayoutComponent;
-  } | null;
-  onComponentUpdate?: (componentId: string, props: Record<string, any>) => void;
-  onClose?: () => void;
+    sectionId: string
+    containerId: string
+    rowId: string
+    colId: string
+    component: LayoutComponent
+    compId: string
+    gridId?: string
+    carouselId?: string
+    slideIndex?: number
+    cellRow?: number
+    cellCol?: number
+  } | null
+  sections?: Section[]
+  layout?: PageLayout
+  onComponentUpdate?: (componentId: string, props: Record<string, any>) => void
+  onClose?: () => void
+  selectedSectionId?: string
+  onConfigureSectionColumns?: (sectionId: string) => void
+  onSectionUpdate?: (sectionId: string, updates: any) => void
 }
 
-type TabType = 'content' | 'style' | 'advanced' | 'styling' | 'css';
+type TabType = 'content' | 'style' | 'ai'
 
-export const PropertyPanel: React.FC<PropertyPanelProps> = ({
-  selectedComponent,
-  onComponentUpdate,
-  onClose
-}) => {
-  const [activeTab, setActiveTab] = useState<TabType>('content')
-  const [localProps, setLocalProps] = useState<Record<string, any>>({})
+const COLOR_SWATCHES = ['#eeeeff', '#7c5cfc', '#10d982', '#ffb020', '#ff5252', '#00d4ff']
+const QUICK_PROMPTS = ['Larger + bolder', 'Gradient text', 'Add animation', 'Pro tone', 'More padding', 'Center align']
 
-  // Initialize local props when component changes or props update
-  React.useEffect(() => {
-    if (selectedComponent?.component?.props && JSON.stringify(selectedComponent.component.props) !== JSON.stringify(localProps)) {
-      setLocalProps(selectedComponent.component.props)
-    }
-  }, [selectedComponent?.component?.props, localProps])
+const findComponentInLayout = (layout: PageLayout, componentId: string): LayoutComponent | null => {
+  const search = (component: LayoutComponent | null | undefined): LayoutComponent | null => {
+    if (!component) return null
+    if (component.id === componentId) return component
 
-  const componentDef = selectedComponent ? componentRegistry.getComponent(selectedComponent.component.type) : null
-
-  // Group properties by tabs
-  const groupedProperties = React.useMemo(() => {
-    if (!componentDef) {
-      return {
-        content: [],
-        style: [],
-        advanced: [],
-        styling: [],
-        css: []
+    if (component.props?.components) {
+      for (const nested of component.props.components) {
+        const result = search(nested)
+        if (result) return result
       }
     }
 
-    const groups: Record<TabType, Array<{ name: string; config: any }>> = {
-      content: [],
-      style: [],
-      advanced: [],
-      styling: [],
-      css: []
+    if (component.props?.slides) {
+      for (const slide of component.props.slides) {
+        for (const nested of slide?.components || []) {
+          const result = search(nested)
+          if (result) return result
+        }
+      }
     }
 
-    Object.entries(componentDef.schema.properties).forEach(([propName, config]) => {
-      // Simple heuristic: style-related properties go to style tab
-      const styleProps = ['color', 'background', 'fontSize', 'fontWeight', 'textAlign', 'width', 'height', 'padding', 'margin', 'border']
-      const advancedProps = ['className', 'id', 'data-', 'aria-']
+    if (component.props?.cells) {
+      for (const row of component.props.cells) {
+        for (const cell of row || []) {
+          const result = search(cell?.component)
+          if (result) return result
+        }
+      }
+    }
 
-      if (styleProps.some(styleProp => propName.toLowerCase().includes(styleProp.toLowerCase()))) {
-        groups.style.push({ name: propName, config })
-      } else if (advancedProps.some(advProp => propName.toLowerCase().includes(advProp.toLowerCase()))) {
-        groups.advanced.push({ name: propName, config })
+    return null
+  }
+
+  for (const section of layout?.sections || []) {
+    for (const row of section.container?.rows || []) {
+      for (const column of row.columns || []) {
+        for (const component of column.components || []) {
+          const result = search(component)
+          if (result) return result
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+export const PropertyPanel: React.FC<PropertyPanelProps> = ({
+  selectedComponent,
+  sections = [],
+  layout,
+  onComponentUpdate,
+  selectedSectionId,
+  onSectionUpdate,
+}) => {
+  const [activeTab, setActiveTab] = useState<TabType>('content')
+  const [localProps, setLocalProps] = useState<Record<string, any>>({})
+  const [selectedSection, setSelectedSection] = useState<Section | null>(null)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const sectionDebounceRef = useRef<NodeJS.Timeout>()
+
+  const resolvedComponent = useMemo(() => {
+    if (!selectedComponent) return null
+    if (layout) return findComponentInLayout(layout, selectedComponent.compId) || selectedComponent.component
+    return selectedComponent.component
+  }, [layout, selectedComponent])
+
+  const componentDef = useMemo(
+    () => (resolvedComponent ? componentRegistry.getComponent(resolvedComponent.type) : null),
+    [resolvedComponent],
+  )
+
+  useEffect(() => {
+    setLocalProps(resolvedComponent?.props || {})
+  }, [resolvedComponent])
+
+  useEffect(() => {
+    if (!selectedSectionId) {
+      setSelectedSection(null)
+      return
+    }
+    setSelectedSection(sections.find((section) => section.id === selectedSectionId) || null)
+  }, [sections, selectedSectionId])
+
+  useEffect(() => {
+    return () => {
+      if (sectionDebounceRef.current) clearTimeout(sectionDebounceRef.current)
+    }
+  }, [])
+
+  const groupedProperties = useMemo(() => {
+    const groups = {
+      content: [] as Array<{ name: string; config: any }>,
+      style: [] as Array<{ name: string; config: any }>,
+    }
+
+    if (!componentDef?.schema?.properties) return groups
+
+    Object.entries(componentDef.schema.properties).forEach(([name, config]) => {
+      const low = name.toLowerCase()
+      if (['font', 'color', 'align', 'padding', 'margin', 'border', 'radius', 'opacity', 'background'].some((key) => low.includes(key))) {
+        groups.style.push({ name, config })
       } else {
-        groups.content.push({ name: propName, config })
+        groups.content.push({ name, config })
       }
     })
 
     return groups
   }, [componentDef])
 
-  if (!selectedComponent) {
+  const usedProps = new Set([
+    'text',
+    'title',
+    'headingText',
+    'content',
+    'label',
+    'level',
+    'semanticLevel',
+    'fontFamily',
+    'fontSize',
+    'size',
+    'fontWeight',
+    'weight',
+    'textAlign',
+    'align',
+    'color',
+    'padding',
+    'opacity',
+    'borderRadius',
+    'borderStyle',
+    'customCSS',
+  ])
+
+  const handlePropChange = useCallback(
+    (propName: string, value: any) => {
+      if (!selectedComponent) return
+      const nextProps = { ...localProps, [propName]: value }
+      if (propName === 'level') nextProps.semanticLevel = value
+      setLocalProps(nextProps)
+      onComponentUpdate?.(resolvedComponent?.id || selectedComponent.compId, nextProps)
+    },
+    [localProps, onComponentUpdate, resolvedComponent, selectedComponent],
+  )
+
+  const handleSectionUpdate = useCallback(
+    (sectionId: string, updates: any) => {
+      if (!onSectionUpdate) return
+      if (sectionDebounceRef.current) clearTimeout(sectionDebounceRef.current)
+      sectionDebounceRef.current = setTimeout(() => onSectionUpdate(sectionId, updates), 220)
+    },
+    [onSectionUpdate],
+  )
+
+  const headingProp = ['headingText', 'title', 'text', 'content', 'label'].find((key) => key in localProps) || 'text'
+  const levelValue = localProps.level || localProps.semanticLevel || 'h1'
+  const fontFamily = localProps.fontFamily || 'Inter'
+  const fontSize = Number(localProps.fontSize || localProps.size || 50)
+  const fontWeight = String(localProps.fontWeight || localProps.weight || 600)
+  const textAlign = String(localProps.textAlign || localProps.align || 'left')
+  const colorValue = String(localProps.color || '#eeeeff')
+  const paddingValue = String(localProps.padding ?? '24')
+  const opacityValue = Number(localProps.opacity ?? 100)
+  const radiusValue = Number(localProps.borderRadius ?? 0)
+  const borderStyle = String(localProps.borderStyle || 'solid').toLowerCase()
+  const sectionSettings = (selectedSection?.settings || {}) as Record<string, any>
+  const sectionPaddingValue = String(sectionSettings.padding ?? 24)
+  const sectionOpacityValue = Number(sectionSettings.opacity ?? 100)
+  const sectionRadiusValue = Number(sectionSettings.borderRadius ?? 0)
+  const sectionBorderStyle = String(sectionSettings.borderStyle || (sectionSettings.borderWidth ? 'solid' : 'none')).toLowerCase()
+
+  const extraContentFields = groupedProperties.content.filter(({ name }) => !usedProps.has(name))
+  const extraStyleFields = groupedProperties.style.filter(({ name }) => !usedProps.has(name))
+
+  if (!selectedComponent && !selectedSectionId) {
     return (
-      <div className="bg-white border-l border-slate-200 shadow-sm flex flex-col">
-        <div className="p-6 border-b border-slate-200 bg-slate-50/50">
-          <h3 className="font-semibold text-slate-900">Properties</h3>
-          <p className="text-sm text-slate-500 mt-1">Component settings and styles</p>
-        </div>
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center text-slate-400">
-            <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-2xl flex items-center justify-center">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <p className="text-slate-600 font-medium">No component selected</p>
-            <p className="text-sm text-slate-500 mt-1">Click on a component to edit its properties</p>
+      <div className="right-inner">
+        <div className="rp-empty">
+          <div className="rp-empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+              <path d="M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+            </svg>
           </div>
+          <p>No component selected</p>
+          <span>Select a section or component on the canvas.</span>
         </div>
       </div>
     )
   }
 
-  if (!componentDef) {
+  if (selectedSectionId && !selectedComponent && selectedSection && onSectionUpdate) {
     return (
-      <div className="bg-white border-l shadow-lg">
-        <div className="p-4 border-b bg-gray-50">
-          <h3 className="font-semibold">Properties</h3>
-        </div>
-        <div className="p-4 text-center text-gray-500">
-          Component type not found
-        </div>
-      </div>
-    )
-  }
-
-  const handlePropChange = (propName: string, value: any) => {
-    const newProps = { ...localProps, [propName]: value }
-    setLocalProps(newProps)
-
-    // Update the component
-    if (onComponentUpdate) {
-      onComponentUpdate(selectedComponent.compId, newProps)
-    }
-  }
-
-  const handleStyleChange = (property: string, value: any) => {
-    const newProps = { ...localProps, [property]: value }
-    setLocalProps(newProps)
-
-    if (onComponentUpdate) {
-      onComponentUpdate(selectedComponent.compId, newProps)
-    }
-  }
-
-  const handleCSSChange = (css: string) => {
-    const newProps = { ...localProps, customCSS: css }
-    setLocalProps(newProps)
-
-    if (onComponentUpdate) {
-      onComponentUpdate(selectedComponent.compId, newProps)
-    }
-  }
-
-  const tabs = [
-    { id: 'content' as TabType, label: 'Content', count: groupedProperties.content.length },
-    { id: 'style' as TabType, label: 'Style', count: groupedProperties.style.length },
-    { id: 'styling' as TabType, label: 'Advanced Styling', icon: '🎨', count: 0 },
-    { id: 'css' as TabType, label: 'Custom CSS', icon: '💻', count: 0 },
-    { id: 'advanced' as TabType, label: 'Advanced', count: groupedProperties.advanced.length }
-  ].filter(tab => tab.count > 0 || tab.id === 'styling' || tab.id === 'css')
-
-  return (
-    <div className="bg-white border-l border-slate-200 shadow-sm flex flex-col">
-      {/* Header */}
-      <div className="p-6 border-b border-slate-200 bg-slate-50/50">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-slate-900">Properties</h3>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="text-slate-500 hover:text-slate-700 transition-all duration-200 hover:scale-105 p-1"
-            >
-              ✕
-            </button>
-          )}
+      <div className="right-inner">
+        <div className="rp-top">
+          <div className="rp-eye">Selected component</div>
+          <div className="rp-name">{selectedSection.name || 'Section'}</div>
+          <div className="rp-sub">{`${selectedSection.type || 'section'} · ${selectedSection.id}`}</div>
         </div>
 
-        {/* Component Info */}
-        <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
-          <div className="text-sm font-semibold text-slate-900">
-            {componentDef.name}
-          </div>
-          <div className="text-xs text-slate-500 mt-1 uppercase tracking-wide">
-            {componentDef.category} • {selectedComponent.component.type}
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      {tabs.length > 1 && (
-        <div className="flex border-b border-slate-200 bg-slate-50/50 overflow-x-auto">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all duration-200 whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              {tab.icon && <span className="text-base">{tab.icon}</span>}
-              <span>{tab.label}</span>
-              {(tab.count ?? 0) > 0 && (
-                <span className="ml-2 text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-medium">
-                  {tab.count}
-                </span>
-              )}
+        <div className="rp-tabs">
+          {[
+            { id: 'content' as const, label: 'Content' },
+            { id: 'style' as const, label: 'Style' },
+            { id: 'ai' as const, label: 'AI ✦' },
+          ].map((tab) => (
+            <button key={tab.id} type="button" className={`rptab ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
+              {tab.label}
             </button>
           ))}
         </div>
-      )}
 
-      {/* Properties */}
-      <div className="flex-1 overflow-y-auto">
-        {activeTab === 'styling' ? (
-          <StylePanel
-            styles={localProps}
-            onStyleChange={handleStyleChange}
-          />
-        ) : activeTab === 'css' ? (
-          <CustomCSS
-            css={localProps.customCSS || ''}
-            onChange={handleCSSChange}
-          />
-        ) : (
-          <div className="p-6 space-y-5">
-            {groupedProperties[activeTab].length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
-                <div className="w-12 h-12 mx-auto mb-3 bg-slate-100 rounded-xl flex items-center justify-center">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
+        <div className="rp-body rp-panel-scroll">
+          {activeTab === 'content' ? <SectionProperties key={selectedSection.id} section={selectedSection} onUpdate={handleSectionUpdate} /> : null}
+
+          {activeTab === 'style' ? (
+            <div className="rp-form">
+              <div className="frow">
+                <label className="flbl">Padding</label>
+                <div className="pad-box">
+                  <input className="pad-in top" value={sectionPaddingValue} onChange={(event) => handleSectionUpdate(selectedSection.id, { settings: { padding: event.target.value } })} />
+                  <input className="pad-in left" value={sectionPaddingValue} onChange={(event) => handleSectionUpdate(selectedSection.id, { settings: { padding: event.target.value } })} />
+                  <div className="pad-center">section</div>
+                  <input className="pad-in right" value={sectionPaddingValue} onChange={(event) => handleSectionUpdate(selectedSection.id, { settings: { padding: event.target.value } })} />
+                  <input className="pad-in bottom" value={sectionPaddingValue} onChange={(event) => handleSectionUpdate(selectedSection.id, { settings: { padding: event.target.value } })} />
                 </div>
-                <p className="text-slate-600 font-medium">No {activeTab} properties</p>
-                <p className="text-sm text-slate-500 mt-1">This component doesn't have {activeTab} settings</p>
               </div>
-            ) : (
-              groupedProperties[activeTab].map(({ name, config }) => (
-                <PropertyField
-                  key={name}
-                  propName={name}
-                  config={config}
-                  value={localProps[name] ?? config.default}
-                  onChange={(value) => handlePropChange(name, value)}
+
+              <div className="frow">
+                <div className="flbl-row">
+                  <label className="flbl">Opacity</label>
+                  <span className="rangeval">{sectionOpacityValue}%</span>
+                </div>
+                <input
+                  className="rangeinp"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={sectionOpacityValue}
+                  onChange={(event) => handleSectionUpdate(selectedSection.id, { settings: { opacity: Number(event.target.value) } })}
                 />
-              ))
-            )}
-          </div>
-        )}
+              </div>
+
+              <div className="frow">
+                <div className="flbl-row">
+                  <label className="flbl">Border Radius</label>
+                  <span className="rangeval">{sectionRadiusValue}px</span>
+                </div>
+                <input
+                  className="rangeinp"
+                  type="range"
+                  min="0"
+                  max="32"
+                  step="1"
+                  value={sectionRadiusValue}
+                  onChange={(event) => handleSectionUpdate(selectedSection.id, { settings: { borderRadius: Number(event.target.value) } })}
+                />
+              </div>
+
+              <div className="frow">
+                <label className="flbl">Border Type</label>
+                <div className="chips">
+                  {['none', 'solid', 'dashed'].map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`chip ${sectionBorderStyle === value ? 'on' : ''}`}
+                      onClick={() =>
+                        handleSectionUpdate(selectedSection.id, {
+                          settings: {
+                            borderStyle: value,
+                            borderWidth: value === 'none' ? 0 : 1,
+                          },
+                        })
+                      }>
+                      {value[0].toUpperCase() + value.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="frow">
+                <label className="flbl">Custom CSS</label>
+                <textarea
+                  className="ta css-mini"
+                  rows={4}
+                  value={sectionSettings.customCSS || ''}
+                  placeholder="/* custom styles */"
+                  onChange={(event) => handleSectionUpdate(selectedSection.id, { settings: { customCSS: event.target.value } })}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === 'ai' ? (
+            <div className="rp-form">
+              <div className="ai-box">
+                <div className="ai-lbl">✦ AI Editor</div>
+                <textarea className="ta ai-ta" rows={3} value={aiPrompt} placeholder="Describe change…" onChange={(event) => setAiPrompt(event.target.value)} />
+                <button type="button" className="gbtn primary w-full justify-center" onClick={() => setAiPrompt(aiPrompt)}>
+                  Generate ✦
+                </button>
+              </div>
+
+              <div className="quick-label">Quick Prompts</div>
+              <div className="quick-tags">
+                {QUICK_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    className="ai-tag"
+                    onClick={() => setAiPrompt((value) => (value ? `${value} ${prompt}` : prompt))}>
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
+  if (!selectedComponent || !resolvedComponent || !componentDef) {
+    return (
+      <div className="right-inner">
+        <div className="rp-empty">
+          <p>Component settings unavailable</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="right-inner">
+      <div className="rp-top">
+        <div className="rp-eye">Selected component</div>
+        <div className="rp-name">{componentDef.name}</div>
+        <div className="rp-sub">{`${resolvedComponent.type} · ${selectedComponent.sectionId}`}</div>
       </div>
 
-      {/* Footer with Save/Apply Buttons */}
-      <div className="p-2 border-t border-slate-200 bg-white">
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              // Apply changes
-              toast.success('Changes applied successfully')
-            }}
-            className="flex-1 px-2 py-1 bg-blue-100 text-black rounded-md hover:bg-blue-200 transition-colors text-xs font-medium"
-          >
-            Apply Changes
+      <div className="rp-tabs">
+        {[
+          { id: 'content' as const, label: 'Content' },
+          { id: 'style' as const, label: 'Style' },
+          { id: 'ai' as const, label: 'AI ✦' },
+        ].map((tab) => (
+          <button key={tab.id} type="button" className={`rptab ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
+            {tab.label}
           </button>
-          <button
-            onClick={() => {
-              // Save changes
-              toast.success('Changes saved successfully')
-            }}
-            className="flex-1 px-2 py-1 bg-green-100 text-black rounded-md hover:bg-green-200 transition-colors text-xs font-medium"
-          >
-            Save
-          </button>
-        </div>
-        <div className="text-xs text-slate-500 text-center mt-1">
-          Changes are applied automatically
-        </div>
+        ))}
+      </div>
+
+      <div className="rp-body rp-panel-scroll">
+        {activeTab === 'content' ? (
+          <div className="rp-form">
+            <div className="frow">
+              <label className="flbl">Heading Text</label>
+              <input className="fi" value={localProps[headingProp] || ''} onChange={(event) => handlePropChange(headingProp, event.target.value)} />
+            </div>
+
+            <div className="frow">
+              <label className="flbl">Level</label>
+              <select className="fi" value={levelValue} onChange={(event) => handlePropChange('level', event.target.value)}>
+                <option value="h1">Heading 1 - Page Title</option>
+                <option value="h2">Heading 2</option>
+                <option value="h3">Heading 3</option>
+              </select>
+              <div className="note-ok">✓ Updates level + semanticLevel</div>
+            </div>
+
+            <div className="frow">
+              <label className="flbl">Font Family</label>
+              <select className="fi" value={fontFamily} onChange={(event) => handlePropChange('fontFamily', event.target.value)}>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Inter">Inter</option>
+                <option value="Playfair Display">Playfair Display</option>
+              </select>
+            </div>
+
+            <div className="frow">
+              <div className="flbl-row">
+                <label className="flbl">Size</label>
+                <span className="rangeval">{fontSize}</span>
+              </div>
+              <input className="rangeinp" type="range" min="12" max="96" step="1" value={fontSize} onChange={(event) => handlePropChange('fontSize', Number(event.target.value))} />
+            </div>
+
+            <div className="frow">
+              <label className="flbl">Weight</label>
+              <div className="chips">
+                {['300', '400', '600', '700'].map((value) => (
+                  <button key={value} type="button" className={`chip ${fontWeight === value ? 'on' : ''}`} onClick={() => handlePropChange('fontWeight', value)}>
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="frow">
+              <label className="flbl">Align</label>
+              <div className="chips">
+                {[
+                  ['left', 'Left'],
+                  ['center', 'Center'],
+                  ['right', 'Right'],
+                ].map(([value, label]) => (
+                  <button key={value} type="button" className={`chip ${textAlign === value ? 'on' : ''}`} onClick={() => handlePropChange('textAlign', value)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rp-divider" />
+
+            <div className="frow">
+              <label className="flbl">Color</label>
+              <div className="swatches">
+                {COLOR_SWATCHES.map((swatch) => (
+                  <button
+                    key={swatch}
+                    type="button"
+                    className={`swatch ${colorValue.toLowerCase() === swatch.toLowerCase() ? 'on' : ''}`}
+                    style={{ background: swatch }}
+                    onClick={() => handlePropChange('color', swatch)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="rp-divider" />
+
+            <div className="vis-box">
+              {[
+                'Mobile',
+                'Desktop',
+                'Scroll animation',
+              ].map((label, index) => (
+                <div key={label} className={`vis-row ${index === 2 ? 'last' : ''}`}>
+                  <span>{label}</span>
+                  <button type="button" className={`mini-toggle ${index === 0 ? '' : 'on'}`}>
+                    <span />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {extraContentFields.length ? (
+              <>
+                <div className="rp-divider" />
+                {extraContentFields.map(({ name, config }) => (
+                  <PropertyField key={name} propName={name} config={config} value={localProps[name] ?? config.default} onChange={(value) => handlePropChange(name, value)} />
+                ))}
+              </>
+            ) : null}
+          </div>
+        ) : null}
+
+        {activeTab === 'style' ? (
+          <div className="rp-form">
+            <div className="frow">
+              <label className="flbl">Padding</label>
+              <div className="pad-box">
+                <input className="pad-in top" value={paddingValue} onChange={(event) => handlePropChange('padding', event.target.value)} />
+                <input className="pad-in left" value={paddingValue} onChange={(event) => handlePropChange('padding', event.target.value)} />
+                <div className="pad-center">content</div>
+                <input className="pad-in right" value={paddingValue} onChange={(event) => handlePropChange('padding', event.target.value)} />
+                <input className="pad-in bottom" value={paddingValue} onChange={(event) => handlePropChange('padding', event.target.value)} />
+              </div>
+            </div>
+
+            <div className="frow">
+              <div className="flbl-row">
+                <label className="flbl">Opacity</label>
+                <span className="rangeval">{opacityValue}%</span>
+              </div>
+              <input className="rangeinp" type="range" min="0" max="100" step="1" value={opacityValue} onChange={(event) => handlePropChange('opacity', Number(event.target.value))} />
+            </div>
+
+            <div className="frow">
+              <div className="flbl-row">
+                <label className="flbl">Border Radius</label>
+                <span className="rangeval">{radiusValue}px</span>
+              </div>
+              <input className="rangeinp" type="range" min="0" max="32" step="1" value={radiusValue} onChange={(event) => handlePropChange('borderRadius', Number(event.target.value))} />
+            </div>
+
+            <div className="frow">
+              <label className="flbl">Border Style</label>
+              <div className="chips">
+                {['none', 'solid', 'dashed'].map((value) => (
+                  <button key={value} type="button" className={`chip ${borderStyle === value ? 'on' : ''}`} onClick={() => handlePropChange('borderStyle', value)}>
+                    {value[0].toUpperCase() + value.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="frow">
+              <label className="flbl">Custom CSS</label>
+              <textarea className="ta css-mini" rows={4} value={localProps.customCSS || ''} placeholder="/* custom styles */" onChange={(event) => handlePropChange('customCSS', event.target.value)} />
+            </div>
+
+            {extraStyleFields.length ? extraStyleFields.map(({ name, config }) => (
+              <PropertyField key={name} propName={name} config={config} value={localProps[name] ?? config.default} onChange={(value) => handlePropChange(name, value)} />
+            )) : null}
+          </div>
+        ) : null}
+
+        {activeTab === 'ai' ? (
+          <div className="rp-form">
+            <div className="ai-box">
+              <div className="ai-lbl">✦ AI Editor</div>
+              <textarea className="ta ai-ta" rows={3} value={aiPrompt} placeholder="Describe change…" onChange={(event) => setAiPrompt(event.target.value)} />
+              <button type="button" className="gbtn primary w-full justify-center" onClick={() => setAiPrompt(aiPrompt)}>
+                Generate ✦
+              </button>
+            </div>
+
+            <div className="quick-label">Quick Prompts</div>
+            <div className="quick-tags">
+              {QUICK_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  className="ai-tag"
+                  onClick={() => setAiPrompt((value) => (value ? `${value} ${prompt}` : prompt))}>
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )

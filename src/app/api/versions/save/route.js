@@ -1,63 +1,104 @@
-import pool from '../../../lib/db.js'
 import { randomUUID } from 'crypto'
+import { NextResponse } from 'next/server'
+import pool from '../../../../lib/db.js'
+import { requireAdmin } from '../../../../lib/require-admin.js'
+import { databaseErrorResponse, parseJsonRow, tableExists, missingTableResponse } from '../../_utils/crud.js'
+
+function normalizeVersionRow(row) {
+  return {
+    id: row.id,
+    page_id: row.page_id,
+    version_name: row.version_name || `Version ${row.version_number || 1}`,
+    version_number: Number(row.version_number || 1),
+    layout: row.layout || row.content || {},
+    description: row.description || row.notes || '',
+    created_by: row.created_by || null,
+    created_at: row.created_at || null,
+  }
+}
 
 export async function POST(request) {
+  const unauthorizedResponse = await requireAdmin()
+  if (unauthorizedResponse) {
+    return unauthorizedResponse
+  }
+
+  let body
   try {
-    const { page_id, name, description, layout } = await request.json()
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
+  }
 
-    if (!page_id) {
-      return Response.json({
-        success: false,
-        error: 'page_id is required'
-      }, { status: 400 })
+  const pageId = body?.page_id
+  if (!pageId) {
+    return NextResponse.json({ success: false, error: 'page_id is required' }, { status: 400 })
+  }
+
+  const layout = body?.layout ?? body?.content
+  if (layout === undefined) {
+    return NextResponse.json({ success: false, error: 'layout is required' }, { status: 400 })
+  }
+
+  const description = body?.description ?? body?.notes ?? ''
+  const createdBy = body?.created_by ?? 'system'
+
+  try {
+    if (!(await tableExists('page_versions'))) {
+      return missingTableResponse('page_versions')
     }
 
-    // Get the next version number for this page
-    const [versionRows] = await pool.execute(
-      'SELECT MAX(version_number) as max_version FROM page_versions WHERE page_id = ?',
-      [page_id]
+    const [pages] = await pool.query('SELECT id FROM pages WHERE id = ? LIMIT 1', [pageId])
+    if (!pages.length) {
+      return NextResponse.json({ success: false, error: 'Page not found' }, { status: 404 })
+    }
+
+    const [versionRows] = await pool.query(
+      'SELECT COALESCE(MAX(version_number), 0) AS max_version FROM page_versions WHERE page_id = ?',
+      [pageId],
     )
+    const versionNumber = Number(versionRows[0]?.max_version || 0) + 1
+    const versionName = body?.version_name || body?.name || `Version ${versionNumber}`
+    const versionId = body?.id || randomUUID()
+    const serializedLayout = JSON.stringify(layout)
 
-    const nextVersionNumber = (versionRows[0]?.max_version || 0) + 1
-
-    const versionId = randomUUID()
-
-    // Insert version
-    await pool.execute(
-      'INSERT INTO page_versions (id, page_id, version_number, name, description, layout, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
-      [
-        versionId,
+    await pool.query(
+      `INSERT INTO page_versions (
+        id,
         page_id,
-        nextVersionNumber,
-        name || `Version ${nextVersionNumber}`,
-        description || '',
-        JSON.stringify(layout || { sections: [] }),
-        'admin' // In a real app, this would come from authentication
-      ]
+        version_name,
+        version_number,
+        content,
+        layout,
+        description,
+        notes,
+        created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [versionId, pageId, versionName, versionNumber, serializedLayout, serializedLayout, description, description, createdBy],
     )
 
-    // Fetch the created version
-    const [rows] = await pool.execute(
-      'SELECT * FROM page_versions WHERE id = ?',
-      [versionId]
+    const [rows] = await pool.query(
+      `SELECT
+        id,
+        page_id,
+        version_name,
+        version_number,
+        content,
+        layout,
+        description,
+        notes,
+        created_by,
+        created_at
+      FROM page_versions
+      WHERE id = ?
+      LIMIT 1`,
+      [versionId],
     )
 
-    const version = {
-      ...rows[0],
-      layout: JSON.parse(rows[0].layout)
-    }
+    const version = normalizeVersionRow(parseJsonRow(rows[0], ['content', 'layout']))
 
-    return Response.json({
-      success: true,
-      version,
-      message: 'Version saved successfully'
-    })
-
+    return NextResponse.json({ success: true, data: version, version, message: 'Version saved successfully' }, { status: 201 })
   } catch (error) {
-    console.error('Error saving version:', error)
-    return Response.json({
-      success: false,
-      error: 'Failed to save version'
-    }, { status: 500 })
+    return databaseErrorResponse(error)
   }
 }

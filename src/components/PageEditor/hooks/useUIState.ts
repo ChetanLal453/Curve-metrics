@@ -6,8 +6,8 @@ export const useUIState = () => {
   const [isResizingLeft, setIsResizingLeft] = useState(false)
   const [isResizingRight, setIsResizingRight] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-  const [leftSidebarVisible, setLeftSidebarVisible] = useState(false)
-  const [rightSidebarVisible, setRightSidebarVisible] = useState(false)
+  const [leftSidebarVisible, setLeftSidebarVisible] = useState(true)
+  const [rightSidebarVisible, setRightSidebarVisible] = useState(true)
 
   // Handle responsive behavior
   useEffect(() => {
@@ -18,8 +18,8 @@ export const useUIState = () => {
         setLeftSidebarVisible(false)
         setRightSidebarVisible(false)
       } else {
-        setLeftSidebarVisible(false)
-        setRightSidebarVisible(false)
+        setLeftSidebarVisible(true)
+        setRightSidebarVisible(true)
       }
     }
     handleResize()

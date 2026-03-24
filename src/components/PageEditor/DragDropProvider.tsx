@@ -1,15 +1,41 @@
 'use client'
 
 import React, { createContext, useContext, useState, useCallback } from 'react'
-import { DragDropContext, DropResult, DragStart, DragUpdate } from '@hello-pangea/dnd'
-import { DragItem, DropZone } from '@/types/page-editor'
+import {
+  DndContext,
+  DragStartEvent,
+  DragEndEvent,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core'
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+
+// 🆕 FIX: Create local types to avoid TypeScript issues
+interface LocalDragItem {
+  type: string;
+  id: string;
+  data: any;
+}
+
+interface LocalDropZone {
+  type: string;
+  id: string;
+  accepts: string[];
+  index?: number;
+  priority?: number;
+  carouselId?: string;
+}
 
 interface DragDropContextType {
-  isDragging: boolean;
-  draggedItem: DragItem | null;
-  validDropZones: DropZone[];
-  setValidDropZones: (zones: DropZone[]) => void;
-  clearValidDropZones: () => void;
+  isDragging: boolean
+  draggedItem: LocalDragItem | null
+  validDropZones: LocalDropZone[]
+  isDraggingOverNested: boolean
+  setValidDropZones: (zones: LocalDropZone[]) => void
+  clearValidDropZones: () => void
 }
 
 const DragDropContextValue = createContext<DragDropContextType | undefined>(undefined)
@@ -23,72 +49,95 @@ export const useDragDrop = () => {
 }
 
 interface DragDropProviderProps {
-  children: React.ReactNode;
-  onDragEnd: (result: DropResult, draggedItem: DragItem | null) => void;
+  children: React.ReactNode
+  onDragEnd: (result: any, draggedItem: any) => void
 }
 
-export const DragDropProvider: React.FC<DragDropProviderProps> = ({
-  children,
-  onDragEnd
-}) => {
+export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children, onDragEnd }) => {
   const [isDragging, setIsDragging] = useState(false)
-  const [draggedItem, setDraggedItem] = useState<DragItem | null>(null)
-  const [validDropZones, setValidDropZones] = useState<DropZone[]>([])
+  const [draggedItem, setDraggedItem] = useState<LocalDragItem | null>(null)
+  const [validDropZones, setValidDropZones] = useState<LocalDropZone[]>([])
+  const [isDraggingOverNested, setIsDraggingOverNested] = useState(false)
 
-  const handleDragStart = useCallback((start: DragStart) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    console.log('🚀 Drag started:', event.active.id)
     setIsDragging(true)
+    document.body.setAttribute('data-cm-dragging', 'true')
 
-    // Parse the draggableId to get the drag item info
-    // Format: type:id or type:id:context
-    const parts = start.draggableId.split(':')
-    const type = parts[0] as DragItem['type']
-    const id = parts[1]
+    const { active } = event
+    const draggableId = active.id as string
 
-    let sourceContext: DragItem['sourceContext'] = undefined
-    if (parts.length > 2) {
-      // Parse context: sectionId:containerId:rowId:colId
-      const contextParts = parts[2].split('-')
-      sourceContext = {
-        sectionId: contextParts[0] !== 'undefined' ? contextParts[0] : undefined,
-        containerId: contextParts[1] !== 'undefined' ? contextParts[1] : undefined,
-        rowId: contextParts[2] !== 'undefined' ? contextParts[2] : undefined,
-        columnId: contextParts[3] !== 'undefined' ? contextParts[3] : undefined,
-      }
+    let type = 'component'
+    let id: string = draggableId
+
+    const parts = draggableId.split(':')
+    if (parts[0] === 'component' && parts[1]) {
+      type = 'component'
+      id = parts[1]
     }
 
-    const item: DragItem = {
-      type,
-      id,
-      data: start, // Store the full drag start info
-      sourceContext
-    }
-
+    const item: LocalDragItem = { type, id, data: active.data.current }
     setDraggedItem(item)
 
-    // Calculate valid drop zones based on item type
     const zones = calculateValidDropZones(item)
     setValidDropZones(zones)
+    console.log('🎯 Valid drop zones:', zones)
   }, [])
 
-  const handleDragUpdate = useCallback((update: DragUpdate) => {
-    // Update valid drop zones based on current position if needed
-    // This can be used for dynamic drop zone highlighting
-  }, [])
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      console.log('🎯 Drag ended:', { active: event.active.id, over: event.over?.id, draggedItem })
 
-  const handleDragEnd = useCallback((result: DropResult) => {
-    setIsDragging(false)
-    setValidDropZones([])
+      setIsDragging(false)
+      document.body.setAttribute('data-cm-dragging', 'false')
+      setValidDropZones([])
 
-    // Handle smart drop zones - auto-create missing structure
-    if (result.destination && draggedItem) {
-      const smartResult = handleSmartDrop(result, draggedItem)
-      onDragEnd(smartResult, draggedItem)
-    } else {
-      onDragEnd(result, draggedItem)
-    }
+      const { active, over } = event
+      if (!over) {
+        console.log('❌ No drop target')
+        setDraggedItem(null)
+        return
+      }
 
-    setDraggedItem(null)
-  }, [onDragEnd, draggedItem])
+      let componentType = draggedItem?.type || 'component'
+      if (componentType === 'component' && draggedItem?.id) {
+        const idParts = draggedItem.id.split(':')
+        componentType = idParts.length > 1 ? idParts[1] : draggedItem.id
+      }
+
+      console.log('🔧 Using component type:', componentType)
+
+      const result = {
+        draggableId: active.id as string,
+        type: componentType,
+        source: {
+          droppableId: active.data.current?.sortable?.containerId || 'component-library',
+          index: active.data.current?.sortable?.index || 0,
+        },
+        destination: {
+          droppableId: over.id as string,
+          index: over.data.current?.sortable?.index || 0,
+        },
+      }
+
+      console.log('📦 Processing drop:', { result, draggedItem, destinationId: over.id })
+
+      const finalDraggedItem = {
+        type: componentType,
+        id: draggedItem?.id || active.id as string,
+        data: draggedItem?.data || active.data.current
+      }
+
+      onDragEnd(result, finalDraggedItem)
+      setDraggedItem(null)
+    },
+    [onDragEnd, draggedItem],
+  )
 
   const clearValidDropZones = useCallback(() => {
     setValidDropZones([])
@@ -98,147 +147,144 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({
     isDragging,
     draggedItem,
     validDropZones,
+    isDraggingOverNested,
     setValidDropZones,
-    clearValidDropZones
+    clearValidDropZones,
   }
 
   return (
     <DragDropContextValue.Provider value={contextValue}>
-      <DragDropContext
-        onDragStart={handleDragStart}
-        onDragUpdate={handleDragUpdate}
-        onDragEnd={handleDragEnd}
-      >
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         {children}
-      </DragDropContext>
+      </DndContext>
     </DragDropContextValue.Provider>
   )
 }
 
-// Helper function to calculate valid drop zones based on drag item type
-function calculateValidDropZones(item: DragItem): DropZone[] {
-  const zones: DropZone[] = []
+// 🆕 FIXED: Enhanced calculateValidDropZones function
+// 🆕 FIXED: Enhanced calculateValidDropZones function
+function calculateValidDropZones(item: LocalDragItem): LocalDropZone[] {
+  if (item.type !== 'component') return []
 
-  switch (item.type) {
-    case 'section':
-      // Sections can be dropped into page layout
-      zones.push({
-        type: 'section',
-        id: 'page-layout',
-        accepts: ['section'],
-        index: 0
-      })
-      break
-
-    case 'container':
-      // Containers can be dropped into sections
-      zones.push({
-        type: 'container',
-        id: 'section-content',
-        accepts: ['container'],
-        index: 0
-      })
-      break
-
-    case 'row':
-      // Rows can be dropped into containers
-      zones.push({
-        type: 'row',
-        id: 'container-content',
-        accepts: ['row'],
-        index: 0
-      })
-      break
-
-    case 'column':
-      // Columns can be dropped into rows
-      zones.push({
-        type: 'column',
-        id: 'row-content',
-        accepts: ['column'],
-        index: 0
-      })
-      break
-
-    case 'component':
-      // Components can be dropped into columns
-      zones.push({
-        type: 'column',
-        id: 'column-content',
-        accepts: ['component'],
-        index: 0
-      })
-      break
-
-    case 'template':
-      // Templates can be dropped into sections or page layout
-      zones.push(
-        {
-          type: 'section',
-          id: 'page-layout',
-          accepts: ['template'],
-          index: 0
-        },
-        {
-          type: 'container',
-          id: 'section-content',
-          accepts: ['template'],
-          index: 0
+  console.log('🔄 Calculating valid drop zones for:', item.type, item.id)
+  
+  // 🆕 FIX: Get ALL drop zones from DOM in REAL-TIME
+  const allDropZones: LocalDropZone[] = []
+  
+  // 1. Get swiper slide drop zones
+  const swiperSlideDropZones = Array.from(document.querySelectorAll('[data-swiper-id][data-ready-for-drop="true"]'))
+    .flatMap(swiperElement => {
+      const swiperId = swiperElement.getAttribute('data-swiper-id')
+      const sectionId = swiperElement.getAttribute('data-section-id')
+      
+      if (!swiperId) return []
+      
+      // Get all slides in this swiper
+      const slideElements = swiperElement.querySelectorAll('[data-slide-index]')
+      
+      return Array.from(slideElements).map(slideElement => {
+        const slideIndex = slideElement.getAttribute('data-slide-index')
+        const dropZoneId = `swiper-${swiperId}-slide-${slideIndex}`
+        
+        return {
+          type: 'swiper-slide',
+          id: dropZoneId,
+          accepts: ['component'],
+          index: 0,
+          priority: 1,
+          swiperId: swiperId,
+          sectionId: sectionId || '',
+          slideIndex: parseInt(slideIndex || '0', 10),
         }
-      )
-      break
-  }
+      })
+    })
+    .filter(Boolean) as LocalDropZone[]
 
-  return zones
-}
-
-// Helper function to handle smart drop zones - auto-create missing structure
-function handleSmartDrop(result: DropResult, draggedItem: DragItem): DropResult {
-  if (!result.destination) return result
-
-  const { destination, draggableId } = result
-  const destParts = destination.droppableId.split(':')
-  const destType = destParts[0]
-  const destId = destParts[1]
-
-  // For components being dropped into columns, ensure the column exists
-  if (draggedItem.type === 'component' && destType === 'column') {
-    // The column should already exist, but we can add validation here
-    return result
-  }
-
-  // For templates being dropped, they might need to be converted to appropriate structure
-  if (draggedItem.type === 'template') {
-    // Convert template to section/container based on drop target
-    if (destType === 'section' || destType === 'page-sections') {
-      // Template becomes a section
-      return {
-        ...result,
-        draggableId: `section:${draggedItem.id}:template`
+  console.log('🎯 Real-time swiper slide drop zones:', swiperSlideDropZones.length)
+  
+  // 🆕 FIX: Get carousel drop zones from DOM in REAL-TIME
+  const carouselDropZones = Array.from(document.querySelectorAll('[data-carousel-id][data-ready-for-drop="true"]'))
+    .map(element => {
+      const dropZoneId = element.getAttribute('data-drop-zone-id')
+      const carouselId = element.getAttribute('data-carousel-id')
+      
+      if (dropZoneId && carouselId) {
+        return {
+          type: 'carousel',
+          id: dropZoneId,
+          accepts: ['component'],
+          index: 0,
+          priority: 2,
+          carouselId: carouselId
+        }
       }
-    } else if (destType === 'container') {
-      // Template becomes a container
-      return {
-        ...result,
-        draggableId: `container:${draggedItem.id}:template`
+      return null
+    })
+    .filter(Boolean) as LocalDropZone[]
+
+  console.log('🎯 Real-time carousel drop zones:', carouselDropZones.length)
+
+  // 🆕 FIX: Get grid cell drop zones from DOM
+  const gridCellDropZones = Array.from(document.querySelectorAll('[data-grid-container="true"]'))
+    .flatMap(gridElement => {
+      const gridId = gridElement.getAttribute('data-grid-id')
+      const carouselId = gridElement.getAttribute('data-carousel-id')
+      const slideIndex = gridElement.getAttribute('data-slide-index')
+      
+      if (!gridId) return []
+      
+      // Create drop zones for each potential grid cell
+      const zones: LocalDropZone[] = []
+      const rows = 2 // Default rows
+      const cols = 3 // Default columns
+      
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const dropZoneId = carouselId 
+            ? `component:empty:grid:${gridId}:${row}:${col}:carousel-${carouselId}:slide-${slideIndex || 0}`
+            : `component:empty:grid:${gridId}:${row}:${col}`
+            
+          zones.push({
+            type: 'grid-cell',
+            id: dropZoneId,
+            accepts: ['component'],
+            index: 1,
+            priority: 3,
+          })
+        }
       }
-    }
-  }
+      
+      return zones
+    })
 
-  // For sections dropped into page layout, ensure proper structure
-  if (draggedItem.type === 'section' && destType === 'section') {
-    return result
-  }
+  console.log('🎯 Grid cell drop zones:', gridCellDropZones.length)
 
-  // For containers dropped into sections, auto-create if needed
-  if (draggedItem.type === 'container' && destType === 'container') {
-    return result
-  }
+  const otherDropZones: LocalDropZone[] = [
+    { type: 'column', id: 'column-content', accepts: ['component'], index: 4, priority: 5 },
+    { type: 'section', id: 'page-sections', accepts: ['component', 'template'], index: 5, priority: 6 },
+    { type: 'container', id: 'section-container', accepts: ['component'], index: 6, priority: 7 },
+    { type: 'component', id: 'component', accepts: ['component'], index: 7, priority: 8 },
+  ]
 
-  // For rows dropped into containers, auto-create if needed
-  if (draggedItem.type === 'row' && destType === 'row') {
-    return result
-  }
+  // 🆕 Combine and sort by priority
+  const allZones = [
+    ...swiperSlideDropZones,
+    ...carouselDropZones, 
+    ...gridCellDropZones, 
+    ...otherDropZones
+  ]
+    .sort((a, b) => (a.priority || 999) - (b.priority || 999))
 
-  return result
+  console.log('🎯 Final valid drop zones:', allZones.length)
+  console.log('📋 Zones breakdown:', {
+    swiperSlides: swiperSlideDropZones.length,
+    carousel: carouselDropZones.length,
+    gridCells: gridCellDropZones.length,
+    column: 1,
+    section: 1,
+    container: 1,
+    component: 1
+  })
+  
+  return allZones
 }

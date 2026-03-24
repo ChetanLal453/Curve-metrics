@@ -1,7 +1,6 @@
 import type { Control } from 'react-hook-form'
 import type { KanbanSectionType, KanbanTaskType } from './data'
 import type { BaseSyntheticEvent } from 'react'
-import type { DropResult } from '@hello-pangea/dnd'
 
 export type ThemeType = 'light' | 'dark'
 
@@ -75,5 +74,5 @@ export type KanbanType = {
   taskForm: FormControlSubmitType
   sectionForm: FormControlSubmitType
   getAllTasksPerSection: (sectionId: KanbanSectionType['id']) => KanbanTaskType[]
-  onDragEnd: (result: DropResult) => void
+  onDragEnd: () => void // Updated type
 }

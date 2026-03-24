@@ -1,38 +1,39 @@
-import pool from '../../../lib/db.js';
+import { normalizeLayout, saveLayoutForPage } from '../../../lib/layout-sync.js'
+import { requireAdmin } from '../../../lib/require-admin.js'
 
 export async function POST(request) {
-  try {
-    const layoutData = await request.json();
+  const unauthorizedResponse = await requireAdmin()
+  if (unauthorizedResponse) {
+    return unauthorizedResponse
+  }
 
-    const { id, name, sections, active } = layoutData;
+  try {
+    const payload = await request.json()
+    const { id, name, sections = [], active } = payload
 
     if (!id) {
-      return Response.json({
-        success: false,
-        error: 'id is required'
-      }, { status: 400 });
+      return Response.json({ success: false, error: 'id is required' }, { status: 400 })
     }
 
-    // Update the layout in the database if layout column exists
-    try {
-      await pool.execute(
-        'UPDATE pages SET layout = ?, name = ? WHERE id = ?',
-        [JSON.stringify({ id, name, sections }), name, id]
-      );
-    } catch (updateError) {
-      // Layout column may not exist, ignore
-      console.warn('Layout column not available, layout not saved');
-    }
+    const layout = normalizeLayout({ id, name, sections }, { id, name })
+    await saveLayoutForPage({
+      pageId: id,
+      layout,
+      pageName: name || '',
+      extraPageFields: active === undefined ? {} : { active },
+    })
 
     return Response.json({
       success: true,
-      message: 'Page saved successfully'
-    });
+      message: 'Page saved successfully',
+    })
   } catch (error) {
-    console.error('Error saving page:', error);
-    return Response.json({
-      success: false,
-      error: 'Failed to save page'
-    }, { status: 500 });
+    return Response.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save page',
+      },
+      { status: 500 },
+    )
   }
 }

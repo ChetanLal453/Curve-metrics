@@ -1,7 +1,14 @@
 import pool from '../../../lib/db.js';
 import { randomUUID } from 'crypto';
+import { requireAdmin } from '../../../lib/require-admin.js';
+import { clearPublicPageBundleCache } from '../../../lib/public-page-cache.js';
 
 export async function POST(request) {
+  const unauthorizedResponse = await requireAdmin();
+  if (unauthorizedResponse) {
+    return unauthorizedResponse;
+  }
+
   try {
     const body = await request.text();
     let data;
@@ -50,6 +57,7 @@ export async function POST(request) {
     );
 
     const pageId = result.insertId;
+    clearPublicPageBundleCache(slug);
 
     return Response.json({
       success: true,

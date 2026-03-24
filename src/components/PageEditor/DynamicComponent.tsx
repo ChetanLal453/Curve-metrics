@@ -1,264 +1,81 @@
-import React, { useState, useRef, useEffect, memo } from 'react'
+'use client'
+
+import React, { useState, useCallback, useEffect, useRef, memo, forwardRef, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { LayoutComponent } from '@/types/page-editor'
+import { componentRegistry } from '@/lib/componentRegistry'
+import AdvancedCardComponent from './components/AdvancedCardComponent'
+import AdvancedImageComponent from './components/AdvancedImageComponent'
+import AdvancedParagraph from './components/AdvancedParagraph'
+import { NewGrid } from './components/NewGrid'
+import Carousel from './components/Carousel'
+import SwiperContainer from './components/SwiperContainer'
+import AdvancedList, { advancedListDefaultProps } from './components/AdvancedList'
+import AdvancedHeading from './components/AdvancedHeading'
+import AdvancedButton, { advancedButtonDefaultProps } from './components/AdvancedButton'
+import AdvancedAccordion, { advancedAccordionDefaultProps } from './components/AdvancedAccordion'
+import { sanitizeHtml } from '@/lib/sanitize-markup'
 
-const DynamicSlider = dynamic(() => import('./components/DynamicSlider').then(mod => mod.default), {
+const DynamicCarousel = dynamic(() => import('./components/Carousel').then((mod) => mod.default), {
   ssr: false,
-  loading: () => <div className="p-4 text-center">Loading slider...</div>
+  loading: () => <div className="p-4 text-center">Loading carousel...</div>,
 })
 
+// In the DynamicComponentInner function, update the props interface:
 interface DynamicComponentProps {
   component: LayoutComponent
   isSelected: boolean
-  onSelect: () => void
+  onSelect?: () => void
   onUpdate: (newProps: Record<string, any>) => void
   editing?: boolean
+  onComponentSelect?: (
+    component: LayoutComponent,
+    context: {
+      sectionId: string
+      containerId: string
+      rowId: string
+      colId: string
+      carouselId?: string
+      slideIndex?: number
+      gridId?: string
+      cellRow?: number
+      cellCol?: number
+      source?: 'grid-cell' | 'carousel-direct' | 'slide'
+      isNestedSelection?: boolean
+      parentComponentId?: string
+      parentGridId?: string
+    },
+  ) => void
+  onComponentUpdate?: (componentId: string, props: Record<string, any>) => void
+  draggableProps?: any
+  dragHandleProps?: any
+  onDragEnd?: (result: any, draggedItem: any) => void
+  sectionId?: string
+  containerId?: string
+  rowId?: string
+  colId?: string
+  carouselId?: string
+  slideIndex?: number
+  // ✅ FIXED: Add these missing props
+  gridId?: string
+  cellRow?: number
+  cellCol?: number
+  parentGridId?: string
+  setSelectedComponent?: (component: { sectionId: string; compId: string; component: LayoutComponent }) => void
+  deleteComponent?: (componentId: string, context?: any) => void
+  onDelete?: (componentId: string, context?: any) => void
+  layout?: any
+  parentComponentId?: string
 }
 
-export const DynamicComponent: React.FC<DynamicComponentProps> = memo(({
-  component,
-  isSelected,
-  onSelect,
-  onUpdate,
-  editing = false
-}) => {
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onSelect()
-  }
+// ==================== HELPER COMPONENTS ====================
 
-  const renderEditableText = (text: string, placeholder: string = 'Click to edit') => {
-    return (
-      <div
-        contentEditable
-        suppressContentEditableWarning
-        className="min-h-[1.5em] p-2 border-2 border-transparent hover:border-gray-300 rounded focus:outline-none focus:border-blue-400"
-        onInput={(e) => onUpdate({ ...component.props, text: e.currentTarget.innerHTML })}
-        onClick={handleClick}
-        dangerouslySetInnerHTML={{ __html: text || placeholder }}
-      />
-    )
-  }
-
-  const renderComponent = () => {
-    switch (component.type) {
-      case 'heading': {
-        const [text, setText] = useState(component.props?.text || 'Heading Text')
-        const [isEditing, setIsEditing] = useState(false)
-        useEffect(() => setText(component.props?.text || 'Heading Text'), [component.props?.text])
-
-        const Tag = component.props?.level || 'h2'
-
-        const headingStyle = {
-          fontSize: component.props?.fontSize || '24px',
-          fontWeight: component.props?.fontWeight || 'bold',
-          color: component.props?.fontColor || '#000000',
-          fontFamily: component.props?.fontFamily || 'inherit',
-          textAlign: component.props?.align || 'left',
-          lineHeight: component.props?.lineHeight || '1.2',
-          letterSpacing: component.props?.letterSpacing || '0px',
-          backgroundColor: component.props?.backgroundColor || 'transparent',
-          padding: component.props?.padding || '0px',
-          margin: component.props?.margin || '0px 0px 16px 0px',
-          textTransform: component.props?.textTransform || 'none',
-          cursor: 'pointer',
-          border: isSelected ? '2px solid #3b82f6' : '2px solid transparent',
-          borderRadius: '4px',
-          transition: 'border-color 0.2s ease',
-          minHeight: '1.5em',
-          outline: 'none'
-        }
-
-        return (
-          <div className="relative">
-            {isEditing ? (
-              <input
-                type="text"
-                value={text}
-                onChange={(e) => {
-                  const newText = e.target.value
-                  setText(newText)
-                  onUpdate({ ...component.props, text: newText })
-                }}
-                onBlur={() => setIsEditing(false)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === 'Escape') {
-                    setIsEditing(false)
-                  }
-                }}
-                style={{
-                  ...headingStyle,
-                  border: '2px solid #3b82f6',
-                  backgroundColor: 'white',
-                  padding: '8px 12px',
-                  fontSize: component.props?.fontSize || '24px',
-                  fontWeight: component.props?.fontWeight || 'bold',
-                  color: component.props?.fontColor || '#000000',
-                  fontFamily: component.props?.fontFamily || 'inherit',
-                  textAlign: component.props?.align || 'left',
-                  textTransform: component.props?.textTransform || 'none',
-                  width: '100%',
-                  boxSizing: 'border-box'
-                }}
-                autoFocus
-              />
-            ) : (
-              React.createElement(Tag, {
-                id: component.props?.customId || undefined,
-                className: component.props?.customClass || undefined,
-                style: headingStyle,
-                onClick: (e: React.MouseEvent) => {
-                  e.stopPropagation()
-                  setIsEditing(true)
-                  onSelect()
-                },
-                onDoubleClick: () => setIsEditing(true)
-              }, text)
-            )}
-            {isSelected && (
-              <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded shadow">
-                {Tag.toUpperCase()}
-              </div>
-            )}
-          </div>
-        )
-      }
-
-      case 'paragraph': {
-        const [text, setText] = useState(component.props?.text || 'Paragraph text...')
-        useEffect(() => setText(component.props?.text || 'Paragraph text...'), [component.props?.text])
-
-        return (
-          <div className="relative">
-            <div
-              contentEditable
-              suppressContentEditableWarning
-              className="min-h-[1.5em] p-2 border-2 border-transparent hover:border-gray-300 rounded focus:outline-none focus:border-blue-400"
-              onInput={(e) => {
-                const newText = e.currentTarget.innerHTML
-                setText(newText)
-                onUpdate({ ...component.props, text: newText })
-              }}
-              onClick={handleClick}
-              dangerouslySetInnerHTML={{ __html: text }}
-            />
-          </div>
-        )
-      }
-
-      case 'rich-text':
-        return <DynamicRichText component={component} onUpdate={onUpdate} />
-
-      case 'quote':
-        return <DynamicQuote component={component} onUpdate={onUpdate} />
-
-      case 'list':
-        return <DynamicList component={component} onUpdate={onUpdate} />
-
-      case 'image':
-        return <DynamicImage component={component} onUpdate={onUpdate} />
-
-      case 'image-gallery':
-        return <DynamicGallery component={component} onUpdate={onUpdate} />
-
-      case 'video':
-        return <DynamicVideo component={component} onUpdate={onUpdate} />
-
-      case 'icon':
-        return <DynamicIcon component={component} onUpdate={onUpdate} />
-
-      case 'divider':
-        return <DynamicDivider component={component} onUpdate={onUpdate} />
-
-      case 'button':
-        return <DynamicButton component={component} onUpdate={onUpdate} />
-
-      case 'form':
-        return <DynamicForm component={component} onUpdate={onUpdate} />
-
-      case 'accordion':
-        return <DynamicAccordion component={component} onUpdate={onUpdate} />
-
-      case 'tabs':
-        return <DynamicTabs component={component} onUpdate={onUpdate} />
-
-      case 'modal-trigger':
-        return <DynamicModalTrigger component={component} onUpdate={onUpdate} />
-
-      case 'scroller':
-        return <DynamicScroller component={component} onUpdate={onUpdate} />
-
-      case 'spacer':
-        return <DynamicSpacer component={component} onUpdate={onUpdate} />
-
-      case 'container':
-        return <DynamicContainer component={component} onUpdate={onUpdate} />
-
-      case 'grid':
-        return <DynamicGrid component={component} onUpdate={onUpdate} />
-
-      case 'flex-box':
-        return <DynamicFlexBox component={component} onUpdate={onUpdate} />
-
-      case 'card':
-        return <DynamicCard component={component} onUpdate={onUpdate} isSelected={isSelected} onSelect={onSelect} />
-
-      case 'slider':
-        return <DynamicSlider component={component} onUpdate={onUpdate} />
-
-      case 'testimonial':
-        return <DynamicTestimonial component={component} onUpdate={onUpdate} />
-
-      case 'pricing-table':
-        return <DynamicPricingTable component={component} onUpdate={onUpdate} />
-
-      case 'counter':
-        return <DynamicCounter component={component} onUpdate={onUpdate} />
-
-      case 'timeline':
-        return <DynamicTimeline component={component} onUpdate={onUpdate} />
-
-      case 'map':
-        return <DynamicMap component={component} onUpdate={onUpdate} />
-
-      case 'social-media':
-        return <DynamicSocialMedia component={component} onUpdate={onUpdate} />
-
-      case 'section':
-        return <DynamicSection component={component} onUpdate={onUpdate} />
-
-      default:
-        return <div>Unsupported component type: {component.type}</div>
-    }
-  }
-
-  return (
-    <div
-      className={`relative w-full max-w-full h-auto overflow-x-hidden border-2 rounded transition-all duration-200 ${
-        isSelected
-          ? 'border-blue-400 bg-blue-50 shadow-lg'
-          : 'border-transparent hover:border-gray-300'
-      }`}
-      onClick={handleClick}
-    >
-      {renderComponent()}
-
-      {/* Selection indicator */}
-      {isSelected && (
-        <div className="absolute -top-3 -left-3 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center shadow">
-          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-          </svg>
-        </div>
-      )}
-    </div>
-  )
-})
-
-// Dynamic Rich Text Component
 const DynamicRichText: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [content, setContent] = useState(component.props?.content || "<p>Start writing your rich text content here...</p>")
-  useEffect(() => setContent(component.props?.content || "<p>Start writing your rich text content here...</p>"), [component.props?.content])
+  const [content, setContent] = useState(component.props?.content || '<p>Start writing your rich text content here...</p>')
+
+  useEffect(() => {
+    setContent(component.props?.content || '<p>Start writing your rich text content here...</p>')
+  }, [component.props?.content])
 
   return (
     <div className="border rounded p-2 min-h-[200px] bg-white">
@@ -267,42 +84,38 @@ const DynamicRichText: React.FC<{ component: LayoutComponent; onUpdate: (props: 
         suppressContentEditableWarning
         className="outline-none min-h-[180px] prose prose-sm max-w-none"
         onInput={(e) => {
-          const newContent = e.currentTarget.innerHTML
+          const newContent = sanitizeHtml(e.currentTarget.innerHTML)
           setContent(newContent)
           onUpdate({ ...component.props, content: newContent })
         }}
-        dangerouslySetInnerHTML={{ __html: content }}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
       />
     </div>
   )
 }
 
-// Dynamic Quote Component
 const DynamicQuote: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [editing, setEditing] = useState<"text" | "author" | null>(null)
+  const [editing, setEditing] = useState<'text' | 'author' | null>(null)
 
   return (
     <blockquote className="border-l-4 border-gray-300 pl-4 italic text-center">
-      {editing === "text" ? (
+      {editing === 'text' ? (
         <textarea
-          value={component.props?.text || "\"This is a quote or testimonial text.\""}
+          value={component.props?.text || '"This is a quote or testimonial text."'}
           onChange={(e) => onUpdate({ ...component.props, text: e.target.value })}
           onBlur={() => setEditing(null)}
           className="w-full p-2 border rounded focus:outline-none focus:border-blue-400"
           autoFocus
         />
       ) : (
-        <p
-          className="cursor-pointer hover:bg-gray-100 p-2 rounded"
-          onClick={() => setEditing("text")}
-        >
-          {component.props?.text || "\"This is a quote or testimonial text.\""}
+        <p className="cursor-pointer hover:bg-gray-100 p-2 rounded" onClick={() => setEditing('text')}>
+          {component.props?.text || '"This is a quote or testimonial text."'}
         </p>
       )}
-      {editing === "author" ? (
+      {editing === 'author' ? (
         <input
           type="text"
-          value={component.props?.author || "Author Name"}
+          value={component.props?.author || 'Author Name'}
           onChange={(e) => onUpdate({ ...component.props, author: e.target.value })}
           onBlur={() => setEditing(null)}
           className="text-sm text-gray-600 border rounded px-2 py-1 focus:outline-none focus:border-blue-400"
@@ -311,16 +124,14 @@ const DynamicQuote: React.FC<{ component: LayoutComponent; onUpdate: (props: any
       ) : (
         <cite
           className="text-sm text-gray-600 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded not-italic font-semibold"
-          onClick={() => setEditing("author")}
-        >
-          — {component.props?.author || "Author Name"}
+          onClick={() => setEditing('author')}>
+          — {component.props?.author || 'Author Name'}
         </cite>
       )}
     </blockquote>
   )
 }
 
-// Dynamic Video Component
 const DynamicVideo: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
   const [editing, setEditing] = useState(false)
 
@@ -329,11 +140,11 @@ const DynamicVideo: React.FC<{ component: LayoutComponent; onUpdate: (props: any
       {editing ? (
         <input
           type="text"
-          value={component.props?.src || "https://www.youtube.com/embed/dQw4w9WgXcQ"}
+          value={component.props?.src || 'https://www.youtube.com/embed/dQw4w9WgXcQ'}
           onChange={(e) => onUpdate({ ...component.props, src: e.target.value })}
           onBlur={() => setEditing(false)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === 'Enter') {
               setEditing(false)
             }
           }}
@@ -342,22 +153,14 @@ const DynamicVideo: React.FC<{ component: LayoutComponent; onUpdate: (props: any
           autoFocus
         />
       ) : (
-        <div
-          className="cursor-pointer hover:bg-gray-100 p-2 rounded border-2 border-dashed border-gray-300"
-          onClick={() => setEditing(true)}
-        >
-          <iframe
-            src={component.props?.src || "https://www.youtube.com/embed/dQw4w9WgXcQ"}
-            className="w-full aspect-video"
-            allowFullScreen
-          />
+        <div className="cursor-pointer hover:bg-gray-100 p-2 rounded border-2 border-dashed border-gray-300" onClick={() => setEditing(true)}>
+          <iframe src={component.props?.src || 'https://www.youtube.com/embed/dQw4w9WgXcQ'} className="w-full aspect-video" allowFullScreen />
         </div>
       )}
     </div>
   )
 }
 
-// Dynamic Icon Component
 const DynamicIcon: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
   const [editing, setEditing] = useState(false)
 
@@ -366,11 +169,11 @@ const DynamicIcon: React.FC<{ component: LayoutComponent; onUpdate: (props: any)
       {editing ? (
         <input
           type="text"
-          value={component.props?.name || "star"}
+          value={component.props?.name || 'star'}
           onChange={(e) => onUpdate({ ...component.props, name: e.target.value })}
           onBlur={() => setEditing(false)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === 'Enter') {
               setEditing(false)
             }
           }}
@@ -379,315 +182,396 @@ const DynamicIcon: React.FC<{ component: LayoutComponent; onUpdate: (props: any)
           autoFocus
         />
       ) : (
-        <div
-          className="cursor-pointer hover:bg-gray-100 p-4 rounded inline-block"
-          onClick={() => setEditing(true)}
-        >
-          <i className={`fa fa-${component.props?.name || "star"} text-4xl text-gray-600`} />
-          <div className="text-sm text-gray-500 mt-2">{component.props?.name || "star"}</div>
+        <div className="cursor-pointer hover:bg-gray-100 p-4 rounded inline-block" onClick={() => setEditing(true)}>
+          <i className={`fa fa-${component.props?.name || 'star'} text-4xl text-gray-600`} />
+          <div className="text-sm text-gray-500 mt-2">{component.props?.name || 'star'}</div>
         </div>
       )}
     </div>
   )
 }
 
-// Dynamic Divider Component
 const DynamicDivider: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  return (
-    <hr className="border-t-2 border-gray-300 my-4" />
-  )
+  return <hr className="border-t-2 border-gray-300 my-4" />
 }
 
-// Dynamic Button Component
-const DynamicButton = ({ component, onUpdate }: { component: LayoutComponent; onUpdate: (props: any) => void }) => {
-  const [editing, setEditing] = useState<"text" | "link" | null>(null)
+const DynamicButton: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
+  const props = component.props || {}
 
-  const getButtonClasses = () => {
-    const baseClasses = "px-6 py-3 rounded font-medium transition-colors"
-    const variant = component.props?.variant || "primary"
-    switch (variant) {
-      case "secondary":
-        return `${baseClasses} bg-gray-600 text-white hover:bg-gray-700`
-      case "outline":
-        return `${baseClasses} border-2 border-blue-500 text-blue-500 hover:bg-blue-50`
-      case "ghost":
-        return `${baseClasses} text-blue-500 hover:bg-blue-50`
-      default:
-        return `${baseClasses} bg-blue-500 text-white hover:bg-blue-600`
+  const getButtonStyles = (): React.CSSProperties => {
+    const baseStyles: React.CSSProperties = {
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: props.iconSpacing || '8px',
+      padding: `${props.paddingTop || '12px'} ${props.paddingRight || '24px'} ${props.paddingBottom || '12px'} ${props.paddingLeft || '24px'}`,
+      borderRadius: props.borderRadius || '6px',
+      textDecoration: 'none',
+      fontWeight: props.fontWeight || '600',
+      cursor: props.disabled ? 'not-allowed' : 'pointer',
+      border: 'none',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      fontFamily: props.fontFamily || 'system-ui, sans-serif',
+      fontSize: props.fontSize || '16px',
+      letterSpacing: props.letterSpacing || '0px',
+      textTransform: props.textTransform || 'none',
+      lineHeight: props.lineHeight || '1.5',
+      width: props.fullWidth ? '100%' : 'auto',
+      opacity: props.disabled ? 0.6 : 1,
+      position: 'relative',
+      overflow: 'hidden',
+    }
+
+    const sizeStyles: Record<string, React.CSSProperties> = {
+      small: { padding: '8px 16px', fontSize: '14px' },
+      medium: { padding: '12px 24px', fontSize: '16px' },
+      large: { padding: '16px 32px', fontSize: '18px' },
+    }
+
+    const getVariantStyles = (): React.CSSProperties => {
+      const variantConfig: Record<string, React.CSSProperties> = {
+        primary: {
+          backgroundColor: props.primaryColor || '#3B82F6',
+          color: props.textColor || '#FFFFFF',
+          border: 'none',
+        },
+        secondary: {
+          backgroundColor: '#6B7280',
+          color: '#FFFFFF',
+          border: 'none',
+        },
+        outline: {
+          backgroundColor: 'transparent',
+          color: props.primaryColor || '#3B82F6',
+          border: `${props.borderWidth || '2px'} solid ${props.borderColor || props.primaryColor || '#3B82F6'}`,
+        },
+        ghost: {
+          backgroundColor: 'transparent',
+          color: props.primaryColor || '#3B82F6',
+          border: 'none',
+        },
+        danger: {
+          backgroundColor: '#EF4444',
+          color: '#FFFFFF',
+          border: 'none',
+        },
+        success: {
+          backgroundColor: '#10B981',
+          color: '#FFFFFF',
+          border: 'none',
+        },
+        warning: {
+          backgroundColor: '#F59E0B',
+          color: '#FFFFFF',
+          border: 'none',
+        },
+      }
+
+      const variant = props.variant as string
+      return variantConfig[variant] || variantConfig.primary
+    }
+
+    const getShadowStyles = (): React.CSSProperties => {
+      const shadows: Record<string, string> = {
+        none: 'none',
+        sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        md: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+        xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+      }
+
+      const shadow = props.shadow as string
+      return { boxShadow: shadows[shadow] || shadows.md }
+    }
+
+    const size = props.size as string
+    const sizeStyle = sizeStyles[size] || sizeStyles.medium
+
+    return {
+      ...baseStyles,
+      ...sizeStyle,
+      ...getVariantStyles(),
+      ...getShadowStyles(),
     }
   }
 
+  const LoadingSpinner = () => (
+    <div
+      style={{
+        width: '16px',
+        height: '16px',
+        border: '2px solid transparent',
+        borderTop: '2px solid currentColor',
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite',
+      }}
+    />
+  )
+
+  const buttonContent = props.loading
+    ? [<LoadingSpinner key="spinner" />, props.loadingText || 'Loading...']
+    : [
+        props.icon && props.iconPosition === 'left' && <span key="icon-left">{props.icon}</span>,
+        <span key="text">{props.text || 'Click Me'}</span>,
+        props.icon && props.iconPosition === 'right' && <span key="icon-right">{props.icon}</span>,
+      ].filter(Boolean)
+
+  const containerStyles: React.CSSProperties = {
+    display: 'flex',
+    justifyContent: props.alignment === 'center' ? 'center' : props.alignment === 'right' ? 'flex-end' : 'flex-start',
+    width: '100%',
+    margin: `${props.marginTop || '0px'} ${props.marginRight || '0px'} ${props.marginBottom || '0px'} ${props.marginLeft || '0px'}`,
+  }
+
   return (
-    <div className="text-center space-y-2">
-      <a
-        href={component.props?.link || "#"}
-        className={getButtonClasses()}
-      >
-        {component.props?.text || "Click Me"}
-      </a>
-      <div className="flex justify-center gap-2 text-sm">
-        <button
-          onClick={() => setEditing("text")}
-          className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
-        >
-          Edit Text
+    <div style={containerStyles}>
+      {props.link && !props.disabled ? (
+        <a
+          href={props.link}
+          target={props.openInNewTab ? '_blank' : '_self'}
+          rel={props.openInNewTab ? 'noopener noreferrer' : undefined}
+          style={getButtonStyles()}>
+          {buttonContent}
+        </a>
+      ) : (
+        <button style={getButtonStyles()} disabled={props.disabled}>
+          {buttonContent}
         </button>
-        <button
-          onClick={() => setEditing("link")}
-          className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
-        >
-          Edit Link
-        </button>
-      </div>
-      {editing === "text" && (
-        <input
-          type="text"
-          value={component.props?.text || "Click Me"}
-          onChange={(e) => onUpdate({ ...component.props, text: e.target.value })}
-          onBlur={() => setEditing(null)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              setEditing(null)
-            }
-          }}
-          className="p-2 border rounded focus:outline-none focus:border-blue-400"
-          autoFocus
-        />
-      )}
-      {editing === "link" && (
-        <input
-          type="text"
-          value={component.props?.link || "#"}
-          onChange={(e) => onUpdate({ ...component.props, link: e.target.value })}
-          onBlur={() => setEditing(null)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              setEditing(null)
-            }
-          }}
-          className="p-2 border rounded focus:outline-none focus:border-blue-400"
-          placeholder="https://example.com"
-          autoFocus
-        />
       )}
     </div>
   )
 }
 
-// Dynamic Form Component
-const DynamicForm: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [fields, setFields] = useState(component.props?.fields || [
-    { type: "text", name: "name", label: "Name", required: true },
-    { type: "email", name: "email", label: "Email", required: true },
-    { type: "textarea", name: "message", label: "Message", required: false }
-  ])
-  const [submitText, setSubmitText] = useState(component.props?.submitText || "Submit")
-
-  const updateFields = (newFields: any[]) => {
-    setFields(newFields)
-    onUpdate({ ...component.props, fields: newFields })
-  }
-
-  const addField = () => {
-    const newFields = [...fields, { type: "text", name: "field" + (fields.length + 1), label: "New Field", required: false }]
-    updateFields(newFields)
-  }
-
-  const removeField = (index: number) => {
-    const newFields = fields.filter((_: any, i: number) => i !== index)
-    updateFields(newFields)
-  }
-
-  const updateField = (index: number, key: string, value: any) => {
-    const newFields = [...fields]
-    newFields[index] = { ...newFields[index], [key]: value }
-    updateFields(newFields)
-  }
-
-  return (
-    <div className="space-y-4 p-4 border rounded bg-gray-50">
-      {fields.map((field: any, index: number) => (
-        <div key={index} className="flex items-center gap-2 p-2 bg-white rounded">
-          <select
-            value={field.type}
-            onChange={(e) => updateField(index, "type", e.target.value)}
-            className="p-1 border rounded text-sm"
-          >
-            <option value="text">Text</option>
-            <option value="email">Email</option>
-            <option value="textarea">Textarea</option>
-          </select>
-          <input
-            type="text"
-            value={field.label}
-            onChange={(e) => updateField(index, "label", e.target.value)}
-            className="flex-1 p-1 border rounded text-sm"
-            placeholder="Field label"
-          />
-          <label className="flex items-center gap-1 text-sm">
-            <input
-              type="checkbox"
-              checked={field.required}
-              onChange={(e) => updateField(index, "required", e.target.checked)}
-            />
-            Required
-          </label>
-          <button
-            onClick={() => removeField(index)}
-            className="text-red-500 hover:text-red-700 p-1"
-          >
-            ×
-          </button>
-        </div>
-      ))}
-      <div className="flex gap-2">
-        <button
-          onClick={addField}
-          className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-        >
-          + Add Field
-        </button>
-        <input
-          type="text"
-          value={submitText}
-          onChange={(e) => {
-            setSubmitText(e.target.value)
-            onUpdate({ ...component.props, submitText: e.target.value })
-          }}
-          className="flex-1 p-1 border rounded text-sm"
-          placeholder="Submit button text"
-        />
-      </div>
-      <div className="text-sm text-gray-600">
-        Form preview: {fields.length} fields, submit button: "{submitText}"
-      </div>
-    </div>
-  )
-}
-
-// Dynamic Accordion Component
+// ==================== DYNAMIC ACCORDION ====================
 const DynamicAccordion: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [items, setItems] = useState(component.props?.items || [
-    { title: "Section 1", content: "Content for section 1" },
-    { title: "Section 2", content: "Content for section 2" }
-  ])
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
-  const [editingField, setEditingField] = useState<"title" | "content" | null>(null)
+  const [openItems, setOpenItems] = useState<Set<string>>(new Set(['1']))
+  const props = component.props || {}
 
-  const updateItems = (newItems: any[]) => {
-    setItems(newItems)
-    onUpdate({ ...component.props, items: newItems })
+  // Default props if not provided
+  const defaultProps = {
+    behavior: 'single',
+    allowAllClosed: false,
+    itemSpacing: '8px',
+    padding: '0px',
+    margin: '0px',
+    titleFontSize: '16px',
+    titleFontWeight: '600',
+    contentFontSize: '14px',
+    fontFamily: 'system-ui, sans-serif',
+    lineHeight: '1.5',
+    titleColor: '#1f2937',
+    titleBackground: '#f9fafb',
+    contentColor: '#4b5563',
+    contentBackground: '#ffffff',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    activeTitleColor: '#1f2937',
+    activeTitleBackground: '#f3f4f6',
+    iconPosition: 'right',
+    icon: '▼',
+    activeIcon: '▲',
+    animation: 'slide',
+    animationDuration: 300,
+    items: [
+      {
+        id: '1',
+        title: 'Frequently Asked Question 1',
+        content: 'This is the detailed answer for the first question.',
+        visible: true,
+      },
+      {
+        id: '2',
+        title: 'Frequently Asked Question 2',
+        content: 'This is the detailed answer for the second question.',
+        visible: true,
+      },
+    ],
   }
 
-  const addItem = () => {
-    const newItems = [...items, { title: "New Section", content: "New content" }]
-    updateItems(newItems)
-    setEditingIndex(newItems.length - 1)
-    setEditingField("title")
-  }
-
-  const removeItem = (index: number) => {
-    const newItems = items.filter((_: any, i: number) => i !== index)
-    updateItems(newItems)
-    if (editingIndex === index) {
-      setEditingIndex(null)
-      setEditingField(null)
+  const items = useMemo(() => {
+    const propItems = props.items || defaultProps.items
+    if (Array.isArray(propItems) && propItems.length > 0) {
+      return propItems.map((item, index) => ({
+        id: item.id || `item-${index}`,
+        title: item.title || 'Untitled Section',
+        content: item.content || 'Content goes here...',
+        visible: item.visible !== false,
+      }))
     }
+    return defaultProps.items
+  }, [props.items])
+
+  const toggleItem = useCallback(
+    (itemId: string) => {
+      setOpenItems((prev) => {
+        const newOpenItems = new Set(prev)
+        const behavior = props.behavior || defaultProps.behavior
+        const allowAllClosed = props.allowAllClosed || defaultProps.allowAllClosed
+
+        if (behavior === 'single') {
+          newOpenItems.clear()
+          if (!prev.has(itemId) || allowAllClosed) {
+            newOpenItems.add(itemId)
+          }
+        } else {
+          if (newOpenItems.has(itemId)) {
+            newOpenItems.delete(itemId)
+          } else {
+            newOpenItems.add(itemId)
+          }
+        }
+
+        return newOpenItems
+      })
+    },
+    [props.behavior, props.allowAllClosed],
+  )
+
+  const isItemOpen = useCallback((itemId: string) => openItems.has(itemId), [openItems])
+
+  const accordionStyle: React.CSSProperties = {
+    padding: props.padding || defaultProps.padding,
+    margin: props.margin || defaultProps.margin,
+    fontFamily: props.fontFamily || defaultProps.fontFamily,
+    lineHeight: props.lineHeight || defaultProps.lineHeight,
   }
 
-  const updateItem = (index: number, field: "title" | "content", value: string) => {
-    const newItems = [...items]
-    newItems[index] = { ...newItems[index], [field]: value }
-    updateItems(newItems)
+  const AccordionItem = useMemo(() => {
+    return ({ item, index }: { item: any; index: number }) => {
+      const isOpen = isItemOpen(item.id)
+      const contentRef = useRef<HTMLDivElement>(null)
+      const [contentHeight, setContentHeight] = useState(0)
+
+      useEffect(() => {
+        if (contentRef.current && isOpen) {
+          setContentHeight(contentRef.current.scrollHeight)
+        }
+      }, [item.content, isOpen])
+
+      const itemStyle: React.CSSProperties = {
+        marginBottom: props.itemSpacing || defaultProps.itemSpacing,
+        border: props.border || defaultProps.border,
+        borderRadius: props.borderRadius || defaultProps.borderRadius,
+        overflow: 'hidden',
+        transition: 'all 0.2s ease',
+      }
+
+      const headerStyle: React.CSSProperties = {
+        padding: '16px 20px',
+        backgroundColor: isOpen
+          ? props.activeTitleBackground || defaultProps.activeTitleBackground
+          : props.titleBackground || defaultProps.titleBackground,
+        color: isOpen ? props.activeTitleColor || defaultProps.activeTitleColor : props.titleColor || defaultProps.titleColor,
+        fontSize: props.titleFontSize || defaultProps.titleFontSize,
+        fontWeight: props.titleFontWeight || defaultProps.titleFontWeight,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        border: 'none',
+        width: '100%',
+        textAlign: 'left',
+        transition: 'all 0.2s ease',
+      }
+
+      const contentStyle: React.CSSProperties = {
+        backgroundColor: props.contentBackground || defaultProps.contentBackground,
+        color: props.contentColor || defaultProps.contentColor,
+        fontSize: props.contentFontSize || defaultProps.contentFontSize,
+        overflow: 'hidden',
+        transition: props.animation !== 'none' ? `all ${props.animationDuration || defaultProps.animationDuration}ms ease` : 'none',
+      }
+
+      const animation = props.animation || defaultProps.animation
+
+      if (animation === 'slide') {
+        contentStyle.maxHeight = isOpen ? `${contentHeight}px` : '0px'
+        contentStyle.opacity = isOpen ? 1 : 0.8
+      } else if (animation === 'fade') {
+        contentStyle.maxHeight = isOpen ? 'none' : '0px'
+        contentStyle.opacity = isOpen ? 1 : 0
+      } else {
+        contentStyle.display = isOpen ? 'block' : 'none'
+      }
+
+      const icon = isOpen ? props.activeIcon || defaultProps.activeIcon : props.icon || defaultProps.icon
+      const iconPosition = props.iconPosition || defaultProps.iconPosition
+
+      return (
+        <div style={itemStyle} className="accordion-item">
+          <button
+            style={headerStyle}
+            onClick={() => toggleItem(item.id)}
+            aria-expanded={isOpen}
+            aria-controls={`accordion-content-${item.id}`}
+            className="accordion-header hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-blue-300">
+            {iconPosition === 'left' && (
+              <span className="accordion-icon" style={{ fontSize: '12px', minWidth: '16px', transition: 'transform 0.3s ease' }}>
+                {icon}
+              </span>
+            )}
+
+            <span className="accordion-title flex-1" style={{ textAlign: 'left' }}>
+              {item.title}
+            </span>
+
+            {iconPosition !== 'left' && (
+              <span className="accordion-icon" style={{ fontSize: '12px', minWidth: '16px', transition: 'transform 0.3s ease' }}>
+                {icon}
+              </span>
+            )}
+          </button>
+
+          <div
+            ref={contentRef}
+            style={contentStyle}
+            id={`accordion-content-${item.id}`}
+            aria-labelledby={`accordion-header-${item.id}`}
+            role="region"
+            className="accordion-content">
+            <div
+              style={{
+                padding: '20px',
+                lineHeight: props.lineHeight || defaultProps.lineHeight,
+              }}>
+              {item.content}
+            </div>
+          </div>
+        </div>
+      )
+    }
+  }, [props, isItemOpen, toggleItem])
+
+  if (items.length === 0) {
+    return (
+      <div style={accordionStyle} className="accordion-empty-state p-4 text-center text-gray-500 border border-dashed rounded-lg">
+        <p>No accordion items to display. Add questions in the editor.</p>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-2">
-      {items.map((item: any, index: number) => (
-        <div key={index} className="border rounded">
-          <div className="flex items-center justify-between p-3 bg-gray-100">
-            {editingIndex === index && editingField === "title" ? (
-              <input
-                type="text"
-                value={item.title}
-                onChange={(e) => updateItem(index, "title", e.target.value)}
-                onBlur={() => {
-                  setEditingIndex(null)
-                  setEditingField(null)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    setEditingIndex(null)
-                    setEditingField(null)
-                  }
-                }}
-                className="flex-1 p-1 border rounded focus:outline-none focus:border-blue-400"
-                autoFocus
-              />
-            ) : (
-              <h3
-                className="flex-1 cursor-pointer hover:bg-gray-200 p-1 rounded"
-                onClick={() => {
-                  setEditingIndex(index)
-                  setEditingField("title")
-                }}
-              >
-                {item.title}
-              </h3>
-            )}
-            <button
-              onClick={() => removeItem(index)}
-              className="text-red-500 hover:text-red-700 p-1"
-            >
-              ×
-            </button>
-          </div>
-          <div className="p-3">
-            {editingIndex === index && editingField === "content" ? (
-              <textarea
-                value={item.content}
-                onChange={(e) => updateItem(index, "content", e.target.value)}
-                onBlur={() => {
-                  setEditingIndex(null)
-                  setEditingField(null)
-                }}
-                className="w-full p-2 border rounded focus:outline-none focus:border-blue-400"
-                rows={3}
-                autoFocus
-              />
-            ) : (
-              <p
-                className="cursor-pointer hover:bg-gray-100 p-2 rounded"
-                onClick={() => {
-                  setEditingIndex(index)
-                  setEditingField("content")
-                }}
-              >
-                {item.content}
-              </p>
-            )}
-          </div>
-        </div>
-      ))}
-      <button
-        onClick={addItem}
-        className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        + Add Section
-      </button>
+    <div style={accordionStyle} className="professional-accordion">
+      {items
+        .filter((item) => item.visible !== false)
+        .map((item, index) => (
+          <AccordionItem key={item.id} item={item} index={index} />
+        ))}
     </div>
   )
 }
 
-// Dynamic Tabs Component
 const DynamicTabs: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [tabs, setTabs] = useState(component.props?.tabs || [
-    { title: "Tab 1", content: "Content for tab 1" },
-    { title: "Tab 2", content: "Content for tab 2" }
-  ])
+  const [tabs, setTabs] = useState(
+    component.props?.tabs || [
+      { title: 'Tab 1', content: 'Content for tab 1' },
+      { title: 'Tab 2', content: 'Content for tab 2' },
+    ],
+  )
   const [activeTab, setActiveTab] = useState(component.props?.activeTab || 0)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
-  const [editingField, setEditingField] = useState<"title" | "content" | null>(null)
+  const [editingField, setEditingField] = useState<'title' | 'content' | null>(null)
 
   const updateTabs = (newTabs: any[]) => {
     setTabs(newTabs)
@@ -695,10 +579,10 @@ const DynamicTabs: React.FC<{ component: LayoutComponent; onUpdate: (props: any)
   }
 
   const addTab = () => {
-    const newTabs = [...tabs, { title: "New Tab", content: "New content" }]
+    const newTabs = [...tabs, { title: 'New Tab', content: 'New content' }]
     updateTabs(newTabs)
     setEditingIndex(newTabs.length - 1)
-    setEditingField("title")
+    setEditingField('title')
   }
 
   const removeTab = (index: number) => {
@@ -711,7 +595,7 @@ const DynamicTabs: React.FC<{ component: LayoutComponent; onUpdate: (props: any)
     }
   }
 
-  const updateTab = (index: number, field: "title" | "content", value: string) => {
+  const updateTab = (index: number, field: 'title' | 'content', value: string) => {
     const newTabs = [...tabs]
     newTabs[index] = { ...newTabs[index], [field]: value }
     updateTabs(newTabs)
@@ -722,17 +606,17 @@ const DynamicTabs: React.FC<{ component: LayoutComponent; onUpdate: (props: any)
       <div className="flex border-b">
         {tabs.map((tab: any, index: number) => (
           <div key={index} className="flex-1">
-            {editingIndex === index && editingField === "title" ? (
+            {editingIndex === index && editingField === 'title' ? (
               <input
                 type="text"
                 value={tab.title}
-                onChange={(e) => updateTab(index, "title", e.target.value)}
+                onChange={(e) => updateTab(index, 'title', e.target.value)}
                 onBlur={() => {
                   setEditingIndex(null)
                   setEditingField(null)
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === 'Enter') {
                     setEditingIndex(null)
                     setEditingField(null)
                   }
@@ -743,39 +627,28 @@ const DynamicTabs: React.FC<{ component: LayoutComponent; onUpdate: (props: any)
             ) : (
               <button
                 onClick={() => setActiveTab(index)}
-                className={`w-full p-3 text-left ${
-                  activeTab === index
-                    ? "bg-blue-500 text-white border-b-2 border-blue-500"
-                    : "hover:bg-gray-100"
-                }`}
+                className={`w-full p-3 text-left ${activeTab === index ? 'bg-blue-500 text-white border-b-2 border-blue-500' : 'hover:bg-gray-100'}`}
                 onDoubleClick={() => {
                   setEditingIndex(index)
-                  setEditingField("title")
-                }}
-              >
+                  setEditingField('title')
+                }}>
                 {tab.title}
               </button>
             )}
-            <button
-              onClick={() => removeTab(index)}
-              className="ml-2 text-red-500 hover:text-red-700 p-1 text-sm"
-            >
+            <button onClick={() => removeTab(index)} className="ml-2 text-red-500 hover:text-red-700 p-1 text-sm">
               ×
             </button>
           </div>
         ))}
-        <button
-          onClick={addTab}
-          className="p-3 text-blue-500 hover:text-blue-600"
-        >
+        <button onClick={addTab} className="p-3 text-blue-500 hover:text-blue-600">
           +
         </button>
       </div>
       <div className="p-4">
-        {editingIndex !== null && editingField === "content" && editingIndex === activeTab ? (
+        {editingIndex !== null && editingField === 'content' && editingIndex === activeTab ? (
           <textarea
-            value={tabs[activeTab]?.content || ""}
-            onChange={(e) => updateTab(activeTab, "content", e.target.value)}
+            value={tabs[activeTab]?.content || ''}
+            onChange={(e) => updateTab(activeTab, 'content', e.target.value)}
             onBlur={() => {
               setEditingIndex(null)
               setEditingField(null)
@@ -789,10 +662,9 @@ const DynamicTabs: React.FC<{ component: LayoutComponent; onUpdate: (props: any)
             className="cursor-pointer hover:bg-gray-100 p-2 rounded"
             onClick={() => {
               setEditingIndex(activeTab)
-              setEditingField("content")
-            }}
-          >
-            {tabs[activeTab]?.content || "Tab content"}
+              setEditingField('content')
+            }}>
+            {tabs[activeTab]?.content || 'Tab content'}
           </div>
         )}
       </div>
@@ -800,661 +672,280 @@ const DynamicTabs: React.FC<{ component: LayoutComponent; onUpdate: (props: any)
   )
 }
 
-// Dynamic Modal Trigger Component
-const DynamicModalTrigger: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [text, setText] = useState(component.props?.text || "Open Modal")
-  const [modalContent, setModalContent] = useState(component.props?.modalContent || "Modal content goes here")
-  const [editing, setEditing] = useState<"text" | "content" | null>(null)
-
-  useEffect(() => {
-    setText(component.props?.text || "Open Modal")
-  }, [component.props?.text])
-
-  useEffect(() => {
-    setModalContent(component.props?.modalContent || "Modal content goes here")
-  }, [component.props?.modalContent])
-
-  return (
-    <div className="text-center space-y-2">
-      <button
-        onClick={() => alert(modalContent)}
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        {text}
-      </button>
-      <div className="flex justify-center gap-2 text-sm">
-        <button
-          onClick={() => setEditing("text")}
-          className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
-        >
-          Edit Button
-        </button>
-        <button
-          onClick={() => setEditing("content")}
-          className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
-        >
-          Edit Modal
-        </button>
-      </div>
-      {editing === "text" && (
-        <input
-          type="text"
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            onUpdate({ ...component.props, text: e.target.value })
-          }}
-          onBlur={() => setEditing(null)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              setEditing(null)
-            }
-          }}
-          className="p-2 border rounded focus:outline-none focus:border-blue-400"
-          autoFocus
-        />
-      )}
-      {editing === "content" && (
-        <textarea
-          value={modalContent}
-          onChange={(e) => {
-            setModalContent(e.target.value)
-            onUpdate({ ...component.props, modalContent: e.target.value })
-          }}
-          onBlur={() => setEditing(null)}
-          className="w-full p-2 border rounded focus:outline-none focus:border-blue-400"
-          rows={3}
-          autoFocus
-        />
-      )}
-    </div>
-  )
-}
-
-// Dynamic Scroller Component
-const DynamicScroller: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [text, setText] = useState(component.props?.text || "Scrolling text content...")
-  const [speed, setSpeed] = useState(component.props?.speed || "normal")
-  const [direction, setDirection] = useState(component.props?.direction || "left")
-  const [editing, setEditing] = useState(false)
-
-  useEffect(() => {
-    setText(component.props?.text || "Scrolling text content...")
-  }, [component.props?.text])
-
-  useEffect(() => {
-    setSpeed(component.props?.speed || "normal")
-  }, [component.props?.speed])
-
-  useEffect(() => {
-    setDirection(component.props?.direction || "left")
-  }, [component.props?.direction])
-
-  const speedMap: Record<string, string> = {
-    slow: "20s",
-    normal: "10s",
-    fast: "5s"
-  }
-
-  return (
-    <div className="space-y-2">
-      <div
-        className="w-full h-12 bg-gray-100 overflow-hidden flex items-center relative"
-        style={{
-          backgroundColor: component.props?.backgroundColor || "#f0f0f0"
-        }}
-      >
-        <div
-          className="whitespace-nowrap text-sm font-bold"
-          style={{
-            animation: `${direction === "right" ? "scrollRight" : "scrollLeft"} ${speedMap[speed]} linear infinite`,
-            color: component.props?.textColor || "#000000"
-          }}
-        >
-          {text}
-        </div>
-      </div>
-      <div className="flex gap-2 text-sm">
-        <button
-          onClick={() => setEditing(true)}
-          className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
-        >
-          Edit Text
-        </button>
-        <select
-          value={speed}
-          onChange={(e) => {
-            setSpeed(e.target.value)
-            onUpdate({ ...component.props, speed: e.target.value })
-          }}
-          className="p-1 border rounded"
-        >
-          <option value="slow">Slow</option>
-          <option value="normal">Normal</option>
-          <option value="fast">Fast</option>
-        </select>
-        <select
-          value={direction}
-          onChange={(e) => {
-            setDirection(e.target.value)
-            onUpdate({ ...component.props, direction: e.target.value })
-          }}
-          className="p-1 border rounded"
-        >
-          <option value="left">Left</option>
-          <option value="right">Right</option>
-        </select>
-      </div>
-      {editing && (
-        <input
-          type="text"
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            onUpdate({ ...component.props, text: e.target.value })
-          }}
-          onBlur={() => setEditing(false)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              setEditing(false)
-            }
-          }}
-          className="w-full p-2 border rounded focus:outline-none focus:border-blue-400"
-          autoFocus
-        />
-      )}
-    </div>
-  )
-}
-
-// Dynamic Spacer Component
-const DynamicSpacer: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [height, setHeight] = useState(component.props?.height || "20px")
-
-  useEffect(() => {
-    setHeight(component.props?.height || "20px")
-  }, [component.props?.height])
-
-  return (
-    <div className="flex items-center justify-center p-2 border-2 border-dashed border-gray-300 rounded">
-      <div className="text-center">
-        <div
-          className="bg-gray-200 mx-auto"
-          style={{ height: "20px", width: "2px" }}
-        />
-        <input
-          type="text"
-          value={height}
-          onChange={(e) => {
-            setHeight(e.target.value)
-            onUpdate({ ...component.props, height: e.target.value })
-          }}
-          className="mt-2 p-1 border rounded text-sm text-center w-20 focus:outline-none focus:border-blue-400"
-          placeholder="20px"
-        />
-        <div className="text-xs text-gray-500 mt-1">Spacer Height</div>
-      </div>
-    </div>
-  )
-}
-
-// Dynamic Container Component
-const DynamicContainer: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [maxWidth, setMaxWidth] = useState(component.props?.maxWidth || "1200px")
-
-  useEffect(() => {
-    setMaxWidth(component.props?.maxWidth || "1200px")
-  }, [component.props?.maxWidth])
-
-  return (
-    <div className="p-4 border-2 border-dashed border-gray-300 rounded">
-      <div className="text-center mb-4">
-        <input
-          type="text"
-          value={maxWidth}
-          onChange={(e) => {
-            setMaxWidth(e.target.value)
-            onUpdate({ ...component.props, maxWidth: e.target.value })
-          }}
-          className="p-2 border rounded focus:outline-none focus:border-blue-400"
-          placeholder="1200px"
-        />
-        <div className="text-sm text-gray-600 mt-1">Max Width</div>
-      </div>
-      <div className="bg-gray-100 p-4 rounded text-center text-gray-500">
-        Container Content Area
-      </div>
-    </div>
-  )
-}
-
-// Dynamic Grid Component
 const DynamicGrid: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [columns, setColumns] = useState(component.props?.columns || 3)
-  const [gap, setGap] = useState(component.props?.gap || "1rem")
-
-  useEffect(() => {
-    setColumns(component.props?.columns || 3)
-  }, [component.props?.columns])
-
-  useEffect(() => {
-    setGap(component.props?.gap || "1rem")
-  }, [component.props?.gap])
+  const columns = component.props?.columns || 3
+  const gap = component.props?.gap || '1rem'
 
   return (
-    <div className="p-4 border rounded">
-      <div className="flex gap-2 mb-4 text-sm">
-        <label className="flex items-center gap-1">
-          Columns:
-          <input
-            type="number"
-            min="1"
-            max="12"
-            value={columns}
-            onChange={(e) => {
-              const val = parseInt(e.target.value)
-              setColumns(val)
-              onUpdate({ ...component.props, columns: val })
-            }}
-            className="w-16 p-1 border rounded focus:outline-none focus:border-blue-400"
-          />
-        </label>
-        <label className="flex items-center gap-1">
-          Gap:
-          <input
-            type="text"
-            value={gap}
-            onChange={(e) => {
-              setGap(e.target.value)
-              onUpdate({ ...component.props, gap: e.target.value })
-            }}
-            className="w-20 p-1 border rounded focus:outline-none focus:border-blue-400"
-          />
-        </label>
-      </div>
-      <div
-        className="grid gap-2 p-4 bg-gray-50 rounded min-h-[200px]"
-        style={{
-          gridTemplateColumns: `repeat(${columns}, 1fr)`,
-          gap: gap
-        }}
-      >
-        {Array.from({ length: columns * 2 }, (_, i) => (
-          <div key={i} className="bg-white border rounded p-2 text-center text-gray-400 text-sm">
-            Grid Cell {i + 1}
+    <div
+      className="grid min-h-[200px]"
+      style={{
+        gridTemplateColumns: `repeat(${columns}, 1fr)`,
+        gap: gap,
+      }}>
+      {Array.from({ length: columns * 2 }, (_, i) => (
+        <div key={i} className="bg-gray-100 border border-gray-200 p-4 text-center text-gray-500 text-sm flex items-center justify-center">
+          Cell {i + 1}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+interface DynamicFlexBoxProps {
+  component: LayoutComponent
+  onUpdate: (props: any) => void
+  isSelected?: boolean
+}
+
+const DynamicFlexBox: React.FC<DynamicFlexBoxProps> = ({ component, onUpdate, isSelected = false }) => {
+  const componentProps = component.props || {}
+
+  const [localProps, setLocalProps] = useState(() => ({
+    direction: componentProps.direction || 'row',
+    justifyContent: componentProps.justifyContent || 'flex-start',
+    alignItems: componentProps.alignItems || 'stretch',
+    alignContent: componentProps.alignContent || 'stretch',
+    gap: componentProps.gap || '16px',
+    rowGap: componentProps.rowGap || '16px',
+    columnGap: componentProps.columnGap || '16px',
+    wrap: componentProps.wrap || 'nowrap',
+    padding: componentProps.padding || '16px',
+    minHeight: componentProps.minHeight || 'auto',
+    backgroundColor: componentProps.backgroundColor || 'transparent',
+  }))
+
+  useEffect(() => {
+    setLocalProps({
+      direction: componentProps.direction || 'row',
+      justifyContent: componentProps.justifyContent || 'flex-start',
+      alignItems: componentProps.alignItems || 'stretch',
+      alignContent: componentProps.alignContent || 'stretch',
+      gap: componentProps.gap || '16px',
+      rowGap: componentProps.rowGap || '16px',
+      columnGap: componentProps.columnGap || '16px',
+      wrap: componentProps.wrap || 'nowrap',
+      padding: componentProps.padding || '16px',
+      minHeight: componentProps.minHeight || 'auto',
+      backgroundColor: componentProps.backgroundColor || 'transparent',
+    })
+  }, [componentProps])
+
+  const handlePropChange = (propName: string, value: any) => {
+    const newProps = { ...localProps, [propName]: value }
+    setLocalProps(newProps)
+    onUpdate({ ...componentProps, ...newProps })
+  }
+
+  const getContainerStyle = (): React.CSSProperties => ({
+    display: 'flex',
+    flexDirection: localProps.direction,
+    justifyContent: localProps.justifyContent,
+    alignItems: localProps.alignItems,
+    alignContent: localProps.alignContent,
+    flexWrap: localProps.wrap,
+    gap: localProps.gap,
+    rowGap: localProps.rowGap,
+    columnGap: localProps.columnGap,
+    padding: localProps.padding,
+    minHeight: localProps.minHeight === 'auto' ? '120px' : localProps.minHeight,
+    backgroundColor: localProps.backgroundColor,
+    transition: 'all 0.2s ease-in-out',
+  })
+
+  const getDirectionIcon = (direction: string) => {
+    switch (direction) {
+      case 'row':
+        return '→'
+      case 'row-reverse':
+        return '←'
+      case 'column':
+        return '↓'
+      case 'column-reverse':
+        return '↑'
+      default:
+        return '→'
+    }
+  }
+
+  const quickLayouts = [
+    {
+      label: 'Horizontal Start',
+      props: { direction: 'row', justifyContent: 'flex-start', alignItems: 'center' },
+    },
+    {
+      label: 'Horizontal Center',
+      props: { direction: 'row', justifyContent: 'center', alignItems: 'center' },
+    },
+    {
+      label: 'Horizontal Between',
+      props: { direction: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    },
+    {
+      label: 'Vertical Start',
+      props: { direction: 'column', justifyContent: 'flex-start', alignItems: 'stretch' },
+    },
+    {
+      label: 'Vertical Center',
+      props: { direction: 'column', justifyContent: 'center', alignItems: 'center' },
+    },
+  ]
+
+  return (
+    <div
+      className={`
+      relative border-2 rounded-lg transition-all duration-200
+      ${isSelected ? 'border-blue-300 ring-2 ring-blue-100 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'}
+    `}>
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white/80 backdrop-blur-sm">
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
+            <span className="text-lg font-mono">{getDirectionIcon(localProps.direction)}</span>
+            <span className="text-sm font-medium text-gray-700">Flex Container</span>
           </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
-// Dynamic Flex Box Component
-const DynamicFlexBox: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [direction, setDirection] = useState(component.props?.direction || "row")
-
-  useEffect(() => {
-    setDirection(component.props?.direction || "row")
-  }, [component.props?.direction])
-
-  return (
-    <div className="p-4 border rounded">
-      <div className="mb-4">
-        <select
-          value={direction}
-          onChange={(e) => {
-            setDirection(e.target.value)
-            onUpdate({ ...component.props, direction: e.target.value })
-          }}
-          className="p-2 border rounded focus:outline-none focus:border-blue-400"
-        >
-          <option value="row">Horizontal (Row)</option>
-          <option value="column">Vertical (Column)</option>
-        </select>
-      </div>
-      <div
-        className="flex gap-2 p-4 bg-gray-50 rounded min-h-[100px] items-center justify-center"
-        style={{ flexDirection: direction as any }}
-      >
-        <div className="bg-white border rounded p-3 text-center text-gray-400 text-sm">
-          Item 1
+          <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
+            {['row', 'column'].map((dir) => (
+              <button
+                key={dir}
+                onClick={() => handlePropChange('direction', dir)}
+                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                  localProps.direction === dir ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+                }`}>
+                {dir === 'row' ? 'Horizontal' : 'Vertical'}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="bg-white border rounded p-3 text-center text-gray-400 text-sm">
-          Item 2
-        </div>
-        <div className="bg-white border rounded p-3 text-center text-gray-400 text-sm">
-          Item 3
-        </div>
-      </div>
-    </div>
-  )
-}
 
-import DynamicCard from './DynamicCard'
-
-
-// Dynamic Testimonial Component
-const DynamicTestimonial: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [testimonials, setTestimonials] = useState(component.props?.testimonials || [
-    { quote: "This is amazing!", author: "John Doe", position: "CEO" },
-    { quote: "Great service!", author: "Jane Smith", position: "Manager" }
-  ])
-  const [currentIndex, setCurrentIndex] = useState(0)
-
-  const updateTestimonials = (newTestimonials: any[]) => {
-    setTestimonials(newTestimonials)
-    onUpdate({ ...component.props, testimonials: newTestimonials })
-  }
-
-  const addTestimonial = () => {
-    const newTestimonials = [...testimonials, { quote: "New testimonial", author: "New Author", position: "Position" }]
-    updateTestimonials(newTestimonials)
-  }
-
-  const removeTestimonial = (index: number) => {
-    const newTestimonials = testimonials.filter((_: any, i: number) => i !== index)
-    updateTestimonials(newTestimonials)
-    if (currentIndex >= newTestimonials.length) setCurrentIndex(newTestimonials.length - 1)
-  }
-
-  return (
-    <div className="border rounded p-4">
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex gap-2">
-          {testimonials.map((_: any, index: number) => (
+        <div className="flex items-center space-x-2">
+          <span className="text-xs text-gray-500 mr-2">Presets:</span>
+          {quickLayouts.slice(0, 3).map((layout, index) => (
             <button
               key={index}
-              onClick={() => setCurrentIndex(index)}
-              className={`w-3 h-3 rounded-full ${
-                currentIndex === index ? "bg-blue-500" : "bg-gray-300"
-              }`}
-            />
+              onClick={() => {
+                Object.entries(layout.props).forEach(([key, value]) => {
+                  handlePropChange(key, value)
+                })
+              }}
+              className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+              title={layout.label}>
+              {layout.label.split(' ')[0]}
+            </button>
           ))}
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={addTestimonial}
-            className="px-2 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-          >
-            + Testimonial
-          </button>
-          {testimonials.length > 1 && (
-            <button
-              onClick={() => removeTestimonial(currentIndex)}
-              className="px-2 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
-            >
-              Remove
-            </button>
-          )}
-        </div>
       </div>
-      <div className="bg-gray-100 p-8 rounded text-center min-h-[200px] flex items-center justify-center">
-        <div>
-          <blockquote className="text-lg italic mb-4">
-            "{testimonials[currentIndex]?.quote || "Testimonial quote"}"
-          </blockquote>
-          <div className="font-semibold">{testimonials[currentIndex]?.author || "Author Name"}</div>
-          <div className="text-sm text-gray-600">{testimonials[currentIndex]?.position || "Position"}</div>
-        </div>
-      </div>
-      <div className="text-center text-sm text-gray-500 mt-2">
-        Testimonial {currentIndex + 1} of {testimonials.length}
-      </div>
-    </div>
-  )
-}
 
-// Dynamic Pricing Table Component
-const DynamicPricingTable: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [plans, setPlans] = useState(component.props?.plans || [
-    { name: "Basic", price: "$9", features: ["Feature 1", "Feature 2"] },
-    { name: "Pro", price: "$29", features: ["Feature 1", "Feature 2", "Feature 3"] }
-  ])
-
-  const updatePlans = (newPlans: any[]) => {
-    setPlans(newPlans)
-    onUpdate({ ...component.props, plans: newPlans })
-  }
-
-  const addPlan = () => {
-    const newPlans = [...plans, { name: "New Plan", price: "$19", features: ["Feature 1"] }]
-    updatePlans(newPlans)
-  }
-
-  const removePlan = (index: number) => {
-    const newPlans = plans.filter((_: any, i: number) => i !== index)
-    updatePlans(newPlans)
-  }
-
-  return (
-    <div className="grid grid-cols-2 gap-4 p-4">
-      {plans.map((plan: any, index: number) => (
-        <div key={index} className="border rounded p-4 relative">
-          <button
-            onClick={() => removePlan(index)}
-            className="absolute top-2 right-2 text-red-500 hover:text-red-700"
-          >
-            ×
-          </button>
-          <h3 className="text-lg font-semibold">{plan.name}</h3>
-          <div className="text-2xl font-bold text-blue-600">{plan.price}</div>
-          <ul className="mt-2 space-y-1">
-            {plan.features.map((feature: string, i: number) => (
-              <li key={i} className="text-sm">• {feature}</li>
-            ))}
-          </ul>
-        </div>
-      ))}
-      <button
-        onClick={addPlan}
-        className="border-2 border-dashed border-gray-300 rounded p-8 text-center text-gray-500 hover:border-blue-400"
-      >
-        + Add Plan
-      </button>
-    </div>
-  )
-}
-
-// Dynamic Counter Component
-const DynamicCounter: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [value, setValue] = useState(component.props?.value || 0)
-  const [label, setLabel] = useState(component.props?.label || "Counter")
-
-  useEffect(() => {
-    setValue(component.props?.value || 0)
-  }, [component.props?.value])
-
-  useEffect(() => {
-    setLabel(component.props?.label || "Counter")
-  }, [component.props?.label])
-
-  return (
-    <div className="text-center p-4">
-      <div className="text-4xl font-bold text-blue-600">{value.toLocaleString()}</div>
-      <div className="text-gray-600">{label}</div>
-      <div className="mt-2 flex justify-center gap-2">
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => {
-            const val = parseInt(e.target.value) || 0
-            setValue(val)
-            onUpdate({ ...component.props, value: val })
-          }}
-          className="w-20 p-1 border rounded text-center"
-        />
-        <input
-          type="text"
-          value={label}
-          onChange={(e) => {
-            setLabel(e.target.value)
-            onUpdate({ ...component.props, label: e.target.value })
-          }}
-          className="flex-1 p-1 border rounded"
-          placeholder="Label"
-        />
-      </div>
-    </div>
-  )
-}
-
-// Dynamic Timeline Component
-const DynamicTimeline: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [events, setEvents] = useState(component.props?.events || [
-    { date: "2023", title: "Event 1", description: "Description" },
-    { date: "2024", title: "Event 2", description: "Description" }
-  ])
-
-  const updateEvents = (newEvents: any[]) => {
-    setEvents(newEvents)
-    onUpdate({ ...component.props, events: newEvents })
-  }
-
-  const addEvent = () => {
-    const newEvents = [...events, { date: "2025", title: "New Event", description: "Description" }]
-    updateEvents(newEvents)
-  }
-
-  const removeEvent = (index: number) => {
-    const newEvents = events.filter((_: any, i: number) => i !== index)
-    updateEvents(newEvents)
-  }
-
-  return (
-    <div className="space-y-4">
-      {events.map((event: any, index: number) => (
-        <div key={index} className="flex gap-4 relative">
-          <div className="flex flex-col items-center">
-            <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
-            {index < events.length - 1 && <div className="w-0.5 h-16 bg-gray-300 mt-2"></div>}
-          </div>
-          <div className="flex-1 pb-8">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="font-semibold">{event.title}</div>
-                <div className="text-sm text-gray-600">{event.date}</div>
-                <div className="text-sm mt-1">{event.description}</div>
+      <div className="p-6">
+        <div
+          className="rounded-lg border-2 border-dashed border-gray-300 bg-gradient-to-br from-gray-50 to-gray-100/50 transition-all duration-200"
+          style={getContainerStyle()}>
+          {[1, 2, 3].map((item) => (
+            <div
+              key={item}
+              className={`
+                flex items-center justify-center rounded border-2 transition-all duration-200
+                ${isSelected ? 'bg-white border-blue-200 text-blue-600 shadow-sm' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}
+              `}
+              style={{
+                minWidth: localProps.direction.includes('row') ? '80px' : 'auto',
+                minHeight: localProps.direction.includes('column') ? '60px' : 'auto',
+                padding: '12px 16px',
+              }}>
+              <div className="text-center">
+                <div className="font-medium text-sm">Item {item}</div>
+                <div className="text-xs opacity-60 mt-1">{localProps.direction.includes('row') ? '80px' : '60px'}</div>
               </div>
-              <button
-                onClick={() => removeEvent(index)}
-                className="text-red-500 hover:text-red-700"
-              >
-                ×
-              </button>
             </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-gray-500 font-medium">Align:</span>
+            <select
+              value={localProps.justifyContent}
+              onChange={(e) => handlePropChange('justifyContent', e.target.value)}
+              className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500">
+              <option value="flex-start">Start</option>
+              <option value="center">Center</option>
+              <option value="flex-end">End</option>
+              <option value="space-between">Between</option>
+              <option value="space-around">Around</option>
+            </select>
+
+            <select
+              value={localProps.alignItems}
+              onChange={(e) => handlePropChange('alignItems', e.target.value)}
+              className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500">
+              <option value="stretch">Stretch</option>
+              <option value="flex-start">Start</option>
+              <option value="center">Center</option>
+              <option value="flex-end">End</option>
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-gray-500 font-medium">Gap:</span>
+            <input
+              type="text"
+              value={localProps.gap}
+              onChange={(e) => handlePropChange('gap', e.target.value)}
+              className="w-16 text-xs border border-gray-300 rounded px-2 py-1 text-center focus:outline-none focus:border-blue-500 font-mono"
+              placeholder="16px"
+            />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-gray-500 font-medium">Wrap:</span>
+            <button
+              onClick={() => handlePropChange('wrap', localProps.wrap === 'wrap' ? 'nowrap' : 'wrap')}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                localProps.wrap === 'wrap' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-600 border border-gray-300'
+              }`}>
+              {localProps.wrap === 'wrap' ? 'On' : 'Off'}
+            </button>
           </div>
         </div>
-      ))}
-      <button
-        onClick={addEvent}
-        className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        + Add Event
-      </button>
+      </div>
+
+      {isSelected && (
+        <div className="absolute top-3 right-3">
+          <div className="flex items-center space-x-1 bg-blue-500 text-white px-2 py-1 rounded-full text-xs">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Flex Container</span>
+          </div>
+        </div>
+      )}
+
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+        <div className="text-center text-xs text-gray-500">This container will arrange child components using flexbox layout</div>
+      </div>
     </div>
   )
 }
 
-// Dynamic Map Component
-const DynamicMap: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [lat, setLat] = useState(component.props?.lat || 0)
-  const [lng, setLng] = useState(component.props?.lng || 0)
-
-  useEffect(() => {
-    setLat(component.props?.lat || 0)
-  }, [component.props?.lat])
-
-  useEffect(() => {
-    setLng(component.props?.lng || 0)
-  }, [component.props?.lng])
-
+const DynamicCard: React.FC<{
+  component: LayoutComponent
+  onUpdate: (props: any) => void
+  isSelected: boolean
+  onSelect: () => void
+}> = ({ component, onUpdate, isSelected, onSelect }) => {
   return (
-    <div className="p-4 border rounded">
-      <div className="bg-gray-100 h-48 rounded flex items-center justify-center text-gray-500">
-        Map Placeholder
-      </div>
-      <div className="mt-2 flex gap-2 text-sm">
-        <input
-          type="number"
-          value={lat}
-          onChange={(e) => {
-            const val = parseFloat(e.target.value) || 0
-            setLat(val)
-            onUpdate({ ...component.props, lat: val })
-          }}
-          className="flex-1 p-1 border rounded"
-          placeholder="Latitude"
-        />
-        <input
-          type="number"
-          value={lng}
-          onChange={(e) => {
-            const val = parseFloat(e.target.value) || 0
-            setLng(val)
-            onUpdate({ ...component.props, lng: val })
-          }}
-          className="flex-1 p-1 border rounded"
-          placeholder="Longitude"
-        />
-      </div>
+    <div className={`border rounded p-4 ${isSelected ? 'ring-2 ring-blue-400' : ''}`} onClick={onSelect}>
+      <h3 className="text-lg font-semibold">{component.props?.title || 'Card Title'}</h3>
+      <p className="text-gray-600">{component.props?.content || 'Card content goes here...'}</p>
     </div>
   )
 }
 
-// Dynamic Social Media Component
-const DynamicSocialMedia: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [platform, setPlatform] = useState(component.props?.platform || "twitter")
-  const [url, setUrl] = useState(component.props?.url || "#")
-
-  useEffect(() => {
-    setPlatform(component.props?.platform || "twitter")
-  }, [component.props?.platform])
-
-  useEffect(() => {
-    setUrl(component.props?.url || "#")
-  }, [component.props?.url])
-
-  return (
-    <div className="text-center p-4">
-      <select
-        value={platform}
-        onChange={(e) => {
-          setPlatform(e.target.value)
-          onUpdate({ ...component.props, platform: e.target.value })
-        }}
-        className="p-2 border rounded mb-2"
-      >
-        <option value="twitter">Twitter</option>
-        <option value="facebook">Facebook</option>
-        <option value="instagram">Instagram</option>
-        <option value="linkedin">LinkedIn</option>
-      </select>
-      <input
-        type="text"
-        value={url}
-        onChange={(e) => {
-          setUrl(e.target.value)
-          onUpdate({ ...component.props, url: e.target.value })
-        }}
-        className="w-full p-2 border rounded"
-        placeholder="Profile URL"
-      />
-      <div className="mt-2 text-2xl">
-        {platform === "twitter" && "🐦"}
-        {platform === "facebook" && "📘"}
-        {platform === "instagram" && "📷"}
-        {platform === "linkedin" && "💼"}
-      </div>
-    </div>
-  )
-}
-
-// Dynamic Section Component
 const DynamicSection: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [type, setType] = useState(component.props?.type || "home_banner")
+  const [type, setType] = useState(component.props?.type || 'home_banner')
 
   useEffect(() => {
-    setType(component.props?.type || "home_banner")
+    setType(component.props?.type || 'home_banner')
   }, [component.props?.type])
 
   return (
@@ -1462,245 +953,21 @@ const DynamicSection: React.FC<{ component: LayoutComponent; onUpdate: (props: a
       <select
         value={type}
         onChange={(e) => {
-          setType(e.target.value)
-          onUpdate({ ...component.props, type: e.target.value })
+          const newType = e.target.value
+          setType(newType)
+          onUpdate({ ...component.props, type: newType })
         }}
-        className="p-2 border rounded mb-2"
-      >
+        className="p-2 border rounded mb-2">
         <option value="home_banner">Home Banner</option>
         <option value="about">About</option>
         <option value="services">Services</option>
         <option value="contact">Contact</option>
       </select>
-      <div className="bg-gray-100 p-8 rounded text-center text-gray-500">
-        Section: {type.replace("_", " ").toUpperCase()}
-      </div>
+      <div className="bg-gray-100 p-8 rounded text-center text-gray-500">Section: {type.replace('_', ' ').toUpperCase()}</div>
     </div>
   )
 }
 
-// Dynamic List Component
-const DynamicList: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [items, setItems] = useState<string[]>(["List item 1", "List item 2", "List item 3"])
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (component.props?.items && JSON.stringify(component.props.items) !== JSON.stringify(items)) {
-      setItems(component.props.items)
-    }
-  }, [component.props?.items, items])
-
-  const updateItems = (newItems: string[]) => {
-    setItems(newItems)
-    onUpdate({ ...component.props, items: newItems })
-  }
-
-  const addItem = () => {
-    const newItems = [...items, "New item"]
-    updateItems(newItems)
-    setEditingIndex(newItems.length - 1)
-  }
-
-  const removeItem = (index: number) => {
-    const newItems = items.filter((_: any, i: number) => i !== index)
-    updateItems(newItems)
-    if (editingIndex === index) setEditingIndex(null)
-  }
-
-  const updateItem = (index: number, text: string) => {
-    const newItems = [...items]
-    newItems[index] = text
-    updateItems(newItems)
-  }
-
-  const moveItem = (index: number, direction: 'up' | 'down') => {
-    const newItems = [...items]
-    if (direction === 'up' && index > 0) {
-      [newItems[index], newItems[index - 1]] = [newItems[index - 1], newItems[index]]
-    } else if (direction === 'down' && index < newItems.length - 1) {
-      [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]]
-    }
-    updateItems(newItems)
-  }
-
-  const listStyle = {
-    fontSize: component.props?.fontSize || '16px',
-    color: component.props?.fontColor || '#333333',
-    fontWeight: component.props?.fontWeight || 'normal',
-    textAlign: component.props?.textAlign || 'left',
-    lineHeight: component.props?.lineHeight || '1.5',
-    paddingLeft: component.props?.paddingLeft || '20px',
-    margin: '10px 0',
-    listStyleType: component.props?.type === 'unordered' ? (component.props?.bulletStyle || 'disc') : undefined
-  }
-
-  const itemStyle = {
-    marginBottom: component.props?.spacingBetweenItems || '8px'
-  }
-
-  if (component.props?.type === 'ordered') {
-    return (
-      <div className="w-full">
-        <div className="overflow-y-auto overflow-x-hidden p-2 rounded" style={{ height: '20rem' }}>
-          <ol
-            id={component.props?.customId || undefined}
-            className={`w-full max-w-full ${component.props?.customClass || undefined}`}
-            style={listStyle}
-          >
-            {items.map((item: string, index: number) => (
-              <li key={index} style={itemStyle} className="flex items-center gap-2 group">
-                {editingIndex === index ? (
-                  <input
-                    type="text"
-                    value={item}
-                    onChange={(e) => updateItem(index, e.target.value)}
-                    onBlur={() => setEditingIndex(null)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") setEditingIndex(null)
-                      if (e.key === "Escape") setEditingIndex(null)
-                    }}
-                    className="flex-1 px-2 py-1 border rounded focus:outline-none focus:border-blue-400"
-                    autoFocus
-                    style={{
-                      fontSize: component.props?.fontSize || '16px',
-                      color: component.props?.fontColor || '#333333',
-                      fontWeight: component.props?.fontWeight || 'normal'
-                    }}
-                  />
-                ) : (
-                  <span
-                    className="flex-1 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded"
-                    onClick={() => setEditingIndex(index)}
-                    style={{
-                      fontSize: component.props?.fontSize || '16px',
-                      color: component.props?.fontColor || '#333333',
-                      fontWeight: component.props?.fontWeight || 'normal'
-                    }}
-                  >
-                    {item}
-                  </span>
-                )}
-                <div className="opacity-0 group-hover:opacity-100 flex gap-1">
-                  <button
-                    onClick={() => moveItem(index, 'up')}
-                    disabled={index === 0}
-                    className="text-gray-400 hover:text-blue-500 p-1 disabled:opacity-50"
-                    title="Move up"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    onClick={() => moveItem(index, 'down')}
-                    disabled={index === items.length - 1}
-                    className="text-gray-400 hover:text-blue-500 p-1 disabled:opacity-50"
-                    title="Move down"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    onClick={() => removeItem(index)}
-                    className="text-red-500 hover:text-red-700 p-1"
-                    title="Remove item"
-                  >
-                    ×
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-        <button
-          onClick={addItem}
-          className="w-full text-blue-500 hover:text-blue-700 text-sm font-medium bg-white border-t border-gray-200 p-2 text-center"
-        >
-          + Add item
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="w-full">
-      <div className="overflow-y-auto overflow-x-hidden p-2 rounded" style={{ height: '20rem' }}>
-        <ul
-          id={component.props?.customId || undefined}
-          className={`w-full max-w-full ${component.props?.customClass || undefined}`}
-          style={listStyle}
-        >
-          {items.map((item: string, index: number) => (
-            <li key={index} style={itemStyle} className="flex items-center gap-2 group">
-              {editingIndex === index ? (
-                <input
-                  type="text"
-                  value={item}
-                  onChange={(e) => updateItem(index, e.target.value)}
-                  onBlur={() => setEditingIndex(null)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") setEditingIndex(null)
-                    if (e.key === "Escape") setEditingIndex(null)
-                  }}
-                  className="flex-1 px-2 py-1 border rounded focus:outline-none focus:border-blue-400"
-                  autoFocus
-                  style={{
-                    fontSize: component.props?.fontSize || '16px',
-                    color: component.props?.fontColor || '#333333',
-                    fontWeight: component.props?.fontWeight || 'normal'
-                  }}
-                />
-              ) : (
-                <span
-                  className="flex-1 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded"
-                  onClick={() => setEditingIndex(index)}
-                  style={{
-                    fontSize: component.props?.fontSize || '16px',
-                    color: component.props?.fontColor || '#333333',
-                    fontWeight: component.props?.fontWeight || 'normal'
-                  }}
-                >
-                  {item}
-                </span>
-              )}
-              <div className="opacity-0 group-hover:opacity-100 flex gap-1">
-                <button
-                  onClick={() => moveItem(index, 'up')}
-                  disabled={index === 0}
-                  className="text-gray-400 hover:text-blue-500 p-1 disabled:opacity-50"
-                  title="Move up"
-                >
-                  ↑
-                </button>
-                <button
-                  onClick={() => moveItem(index, 'down')}
-                  disabled={index === items.length - 1}
-                  className="text-gray-400 hover:text-blue-500 p-1 disabled:opacity-50"
-                  title="Move down"
-                >
-                  ↓
-                </button>
-                <button
-                  onClick={() => removeItem(index)}
-                  className="text-red-500 hover:text-red-700 p-1"
-                  title="Remove item"
-                >
-                  ×
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <button
-        onClick={addItem}
-        className="w-full text-blue-500 hover:text-blue-700 text-sm font-medium bg-white border-t border-gray-200 p-2 text-center"
-      >
-        + Add item
-      </button>
-      </div>
-      
-    </div>
-  )
-}
-
-// Dynamic Image Component
 const DynamicImage: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
   const [isUploading, setIsUploading] = useState(false)
   const [editingMode, setEditingMode] = useState<'none' | 'src' | 'alt'>('none')
@@ -1711,7 +978,6 @@ const DynamicImage: React.FC<{ component: LayoutComponent; onUpdate: (props: any
 
   const handleImageClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    // If shift+click, edit URL; otherwise open file picker
     if (e.shiftKey) {
       setEditingMode('src')
       setTimeout(() => urlInputRef.current?.focus(), 0)
@@ -1792,21 +1058,21 @@ const DynamicImage: React.FC<{ component: LayoutComponent; onUpdate: (props: any
     display: 'block',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    objectFit: 'cover'
+    objectFit: 'cover',
   }
 
   const containerStyle: React.CSSProperties = {
     textAlign: component.props?.alignment || 'center',
     margin: component.props?.margin || '20px 0px',
-    position: 'relative'
+    position: 'relative',
   }
 
   const imageElement = (
     <img
       id={component.props?.customId || undefined}
       className={component.props?.customClass || undefined}
-      src={component.props?.src || "https://via.placeholder.com/400x300?text=Click+to+upload"}
-      alt={component.props?.alt || "Image"}
+      src={component.props?.src || 'https://via.placeholder.com/400x300?text=Click+to+upload'}
+      alt={component.props?.alt || 'Image'}
       style={imageStyle}
       onClick={handleImageClick}
       onDragOver={handleDragOver}
@@ -1815,14 +1081,18 @@ const DynamicImage: React.FC<{ component: LayoutComponent; onUpdate: (props: any
     />
   )
 
-  const wrappedImage = component.props?.linkUrl ?
-    React.createElement('a', {
-      href: component.props.linkUrl,
-      target: '_blank',
-      rel: 'noopener noreferrer',
-      style: { display: 'inline-block' }
-    }, imageElement) :
-    imageElement
+  const wrappedImage = component.props?.linkUrl
+    ? React.createElement(
+        'a',
+        {
+          href: component.props.linkUrl,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          style: { display: 'inline-block' },
+        },
+        imageElement,
+      )
+    : imageElement
 
   return (
     <figure style={containerStyle}>
@@ -1830,11 +1100,9 @@ const DynamicImage: React.FC<{ component: LayoutComponent; onUpdate: (props: any
         className={`relative inline-block ${dragOver ? 'ring-2 ring-blue-400 ring-opacity-50' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
+        onDrop={handleDrop}>
         {wrappedImage}
 
-        {/* Editing overlay */}
         {editingMode === 'src' && (
           <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center rounded">
             <input
@@ -1863,21 +1131,18 @@ const DynamicImage: React.FC<{ component: LayoutComponent; onUpdate: (props: any
           </div>
         )}
 
-        {/* Upload overlay */}
         {isUploading && (
           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded">
             <div className="text-white text-sm">Uploading...</div>
           </div>
         )}
 
-        {/* Drag overlay */}
         {dragOver && (
           <div className="absolute inset-0 bg-blue-500 bg-opacity-20 border-2 border-dashed border-blue-400 flex items-center justify-center rounded">
             <div className="text-blue-600 font-medium">Drop image here</div>
           </div>
         )}
 
-        {/* Edit buttons */}
         <div className="absolute top-2 right-2 opacity-0 hover:opacity-100 transition-opacity flex gap-1">
           <button
             onClick={(e) => {
@@ -1886,8 +1151,7 @@ const DynamicImage: React.FC<{ component: LayoutComponent; onUpdate: (props: any
               setTimeout(() => urlInputRef.current?.focus(), 0)
             }}
             className="bg-white bg-opacity-90 text-gray-700 px-2 py-1 rounded text-xs hover:bg-white"
-            title="Edit URL"
-          >
+            title="Edit URL">
             URL
           </button>
           <button
@@ -1897,14 +1161,12 @@ const DynamicImage: React.FC<{ component: LayoutComponent; onUpdate: (props: any
               setTimeout(() => altInputRef.current?.focus(), 0)
             }}
             className="bg-white bg-opacity-90 text-gray-700 px-2 py-1 rounded text-xs hover:bg-white"
-            title="Edit Alt Text"
-          >
+            title="Edit Alt Text">
             Alt
           </button>
         </div>
       </div>
 
-      {/* Caption */}
       {component.props?.caption && (
         <figcaption
           className="mt-2 text-sm text-gray-600 italic cursor-pointer hover:bg-gray-100 px-2 py-1 rounded"
@@ -1913,31 +1175,24 @@ const DynamicImage: React.FC<{ component: LayoutComponent; onUpdate: (props: any
             if (newCaption !== null) {
               onUpdate({ ...component.props, caption: newCaption })
             }
-          }}
-        >
+          }}>
           {component.props.caption}
         </figcaption>
       )}
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
     </figure>
   )
 }
 
-// Dynamic Gallery Component
 const DynamicGallery: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
-  const [images, setImages] = useState(component.props?.images || [
-    { src: "https://via.placeholder.com/300x200?text=Image+1", alt: "Image 1" },
-    { src: "https://via.placeholder.com/300x200?text=Image+2", alt: "Image 2" },
-    { src: "https://via.placeholder.com/300x200?text=Image+3", alt: "Image 3" }
-  ])
+  const [images, setImages] = useState(
+    component.props?.images || [
+      { src: 'https://via.placeholder.com/300x200?text=Image+1', alt: 'Image 1' },
+      { src: 'https://via.placeholder.com/300x200?text=Image+2', alt: 'Image 2' },
+      { src: 'https://via.placeholder.com/300x200?text=Image+3', alt: 'Image 3' },
+    ],
+  )
 
   const updateImages = (newImages: any[]) => {
     setImages(newImages)
@@ -1945,7 +1200,7 @@ const DynamicGallery: React.FC<{ component: LayoutComponent; onUpdate: (props: a
   }
 
   const addImage = () => {
-    const newImages = [...images, { src: "https://via.placeholder.com/300x200?text=New+Image", alt: "New Image" }]
+    const newImages = [...images, { src: 'https://via.placeholder.com/300x200?text=New+Image', alt: 'New Image' }]
     updateImages(newImages)
   }
 
@@ -1974,9 +1229,9 @@ const DynamicGallery: React.FC<{ component: LayoutComponent; onUpdate: (props: a
               alt={image.alt}
               className="w-full h-32 object-cover rounded border cursor-pointer"
               onClick={() => {
-                const input = document.createElement("input")
-                input.type = "file"
-                input.accept = "image/*"
+                const input = document.createElement('input')
+                input.type = 'file'
+                input.accept = 'image/*'
                 input.onchange = (e) => {
                   const file = (e.target as HTMLInputElement).files?.[0]
                   if (file) replaceImage(index, file)
@@ -1986,20 +1241,719 @@ const DynamicGallery: React.FC<{ component: LayoutComponent; onUpdate: (props: a
             />
             <button
               onClick={() => removeImage(index)}
-              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-            >
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               ×
             </button>
           </div>
         ))}
       </div>
-      <button
-        onClick={addImage}
-        className="text-blue-500 hover:text-blue-700 text-sm font-medium"
-      >
+      <button onClick={addImage} className="text-blue-500 hover:text-blue-700 text-sm font-medium">
         + Add Image
       </button>
     </div>
   )
 }
 
+// ==================== MAIN COMPONENT ====================
+
+const DynamicComponentInner = memo(
+  forwardRef<HTMLDivElement, DynamicComponentProps>(function DynamicComponentInner(
+    {
+      component,
+      isSelected,
+      onSelect,
+      onUpdate,
+      editing = false,
+      onComponentSelect,
+      onComponentUpdate,
+      draggableProps,
+      dragHandleProps,
+      onDragEnd,
+      sectionId = '',
+      containerId = '',
+      rowId = '',
+      colId = '',
+      carouselId,
+      slideIndex,
+      // ✅ DESTRUCTURE THESE NEW PROPS:
+      gridId,
+      cellRow,
+      cellCol,
+      setSelectedComponent,
+      deleteComponent,
+      onDelete,
+      layout,
+      parentComponentId,
+      parentGridId,
+    },
+    ref,
+  ) {
+    // ✅ Helper function - gridId, cellRow, cellCol ab available hai
+    const createComponentContext = useCallback(
+      (
+        sectionId: string,
+        containerId: string,
+        rowId: string,
+        colId: string,
+        carouselId?: string,
+        slideIndex?: number,
+        gridId?: string,
+        cellRow?: number,
+        cellCol?: number,
+        parentGridId?: string,
+      ) => {
+        return {
+          sectionId,
+          containerId,
+          rowId,
+          colId,
+          carouselId,
+          slideIndex,
+          gridId: gridId || parentGridId,
+          cellRow,
+          cellCol,
+          source: gridId ? ('grid-cell' as const) : carouselId ? ('carousel-direct' as const) : undefined,
+          isNestedSelection: !!gridId || !!carouselId,
+          parentComponentId: containerId,
+          parentGridId,
+        }
+      },
+      [],
+    )
+    const [localProps, setLocalProps] = useState(component.props || {})
+    const [lastUpdateTime, setLastUpdateTime] = useState(0)
+    const prevPropsRef = useRef(component.props || {})
+
+    useEffect(() => {
+      const currentTime = Date.now()
+
+      // Use ref for comparison instead of localProps
+      if (component.props && JSON.stringify(component.props) !== JSON.stringify(prevPropsRef.current)) {
+        setLocalProps(component.props)
+        setLastUpdateTime(currentTime)
+        prevPropsRef.current = component.props
+      }
+    }, [component.props, component.id, component.type]) // localProps REMOVED from dependencies
+
+    const handleClick = (e: React.MouseEvent) => {
+      e.stopPropagation()
+
+      if (onComponentSelect) {
+        const context = createComponentContext(
+          sectionId || '',
+          containerId || '',
+          rowId || '',
+          colId || '',
+          carouselId,
+          slideIndex,
+          gridId, // ✅ NO ERROR NOW
+          cellRow, // ✅ NO ERROR NOW
+          cellCol, // ✅ NO ERROR NOW
+          parentGridId,
+        )
+        onComponentSelect(component, context)
+      }
+
+      onSelect?.()
+    }
+    // ENHANCED: Update handler that bubbles up through onComponentUpdate
+    const handleUpdate = useCallback(
+      (newProps: Record<string, any>) => {
+        console.log('🔄 DynamicComponent: handleUpdate called:', {
+          componentId: component.id,
+          componentType: component.type,
+          newProps,
+          hasOnUpdate: !!onUpdate,
+          hasOnComponentUpdate: !!onComponentUpdate,
+          context: { sectionId, containerId, parentGridId },
+          isGridChild: !!parentGridId,
+        })
+
+        setLocalProps((prev) => ({ ...prev, ...newProps }))
+
+        // FIX: Always call onUpdate for ALL components
+        if (onUpdate) {
+          console.log('📤 DynamicComponent: Calling onUpdate for component:', component.id)
+          onUpdate(newProps)
+        }
+
+        // CRITICAL: For grid children, MUST call onComponentUpdate
+        if (onComponentUpdate && parentGridId) {
+          console.log('📤 DynamicComponent: Bubbling update for grid child:', {
+            componentId: component.id,
+            parentGridId,
+            newProps,
+          })
+          onComponentUpdate(component.id, newProps)
+        } else if (onComponentUpdate) {
+          // Also call for non-grid contexts
+          console.log('📤 DynamicComponent: Calling onComponentUpdate:', {
+            componentId: component.id,
+            newProps,
+          })
+          onComponentUpdate(component.id, newProps)
+        }
+      },
+      [onUpdate, onComponentUpdate, component.id, component.type, sectionId, containerId, parentGridId],
+    )
+
+    const handleSelectForComponents = useCallback(() => {
+      if (onComponentSelect) {
+        const context = createComponentContext(
+          sectionId || '',
+          containerId || '',
+          rowId || '',
+          colId || '',
+          carouselId,
+          slideIndex,
+          gridId, // ✅ NO ERROR NOW
+          cellRow, // ✅ NO ERROR NOW
+          cellCol, // ✅ NO ERROR NOW
+          parentGridId,
+        )
+        onComponentSelect(component, context)
+      }
+
+      onSelect?.()
+    }, [
+      onSelect,
+      onComponentSelect,
+      component.id,
+      sectionId,
+      containerId,
+      rowId,
+      colId,
+      carouselId,
+      slideIndex,
+      gridId, // ✅ NO ERROR NOW
+      cellRow, // ✅ NO ERROR NOW
+      cellCol, // ✅ NO ERROR NOW
+      parentGridId,
+    ])
+
+    const handleDeleteForComponents = useCallback(() => {
+      if (onDelete) {
+        onDelete(component.id)
+      } else if (deleteComponent) {
+        deleteComponent(component.id)
+      }
+    }, [onDelete, deleteComponent, component.id])
+
+    const renderComponent = () => {
+      const propsToUse = localProps
+
+      switch (component.type) {
+        case 'heading': {
+          const [text, setText] = useState(propsToUse?.text || 'Heading Text')
+          const [isEditing, setIsEditing] = useState(false)
+          useEffect(() => setText(propsToUse?.text || 'Heading Text'), [propsToUse?.text])
+
+          const Tag = propsToUse?.level || 'h2'
+
+          const headingStyle = {
+            fontSize: propsToUse?.fontSize || '24px',
+            fontWeight: propsToUse?.fontWeight || 'bold',
+            color: propsToUse?.fontColor || '#000000',
+            fontFamily: propsToUse?.fontFamily || 'inherit',
+            textAlign: propsToUse?.align || 'left',
+            lineHeight: propsToUse?.lineHeight || '1.2',
+            letterSpacing: propsToUse?.letterSpacing || '0px',
+            backgroundColor: propsToUse?.backgroundColor || 'transparent',
+            padding: propsToUse?.padding || '0px',
+            margin: propsToUse?.margin || '0px 0px 16px 0px',
+            textTransform: propsToUse?.textTransform || 'none',
+            cursor: 'pointer',
+            border: isSelected ? '2px solid #3b82f6' : '2px solid transparent',
+            borderRadius: '4px',
+            transition: 'border-color 0.2s ease',
+            minHeight: '1.5em',
+            outline: 'none',
+          }
+
+          return (
+            <div className="relative">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={text}
+                  onChange={(e) => {
+                    const newText = e.target.value
+                    setText(newText)
+                    handleUpdate({ ...propsToUse, text: newText })
+                  }}
+                  onBlur={() => setIsEditing(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === 'Escape') {
+                      setIsEditing(false)
+                    }
+                  }}
+                  style={{
+                    ...headingStyle,
+                    border: '2px solid #3b82f6',
+                    backgroundColor: 'white',
+                    padding: '8px 12px',
+                    fontSize: propsToUse?.fontSize || '24px',
+                    fontWeight: propsToUse?.fontWeight || 'bold',
+                    color: propsToUse?.fontColor || '#000000',
+                    fontFamily: propsToUse?.fontFamily || 'inherit',
+                    textAlign: propsToUse?.align || 'left',
+                    textTransform: propsToUse?.textTransform || 'none',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                  }}
+                  autoFocus
+                />
+              ) : (
+                React.createElement(
+                  Tag,
+                  {
+                    id: propsToUse?.customId || undefined,
+                    className: propsToUse?.customClass || undefined,
+                    style: headingStyle,
+                    onClick: (e: React.MouseEvent) => {
+                      e.stopPropagation()
+                      setIsEditing(true)
+                      onSelect?.()
+                    },
+                    onDoubleClick: () => setIsEditing(true),
+                  },
+                  text,
+                )
+              )}
+              {isSelected && (
+                <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded shadow">{Tag.toUpperCase()}</div>
+              )}
+            </div>
+          )
+        }
+
+        case 'advancedheading': {
+          const [isEditing, setIsEditing] = useState(false)
+          const [localText, setLocalText] = useState(propsToUse?.text || 'Advanced Heading')
+
+          useEffect(() => {
+            setLocalText(propsToUse?.text || 'Advanced Heading')
+          }, [propsToUse?.text])
+
+          const handleTextUpdate = (newText: string) => {
+            setLocalText(newText)
+            handleUpdate({ ...propsToUse, text: newText })
+          }
+
+          const handleSeoWarning = (warnings: string[]) => {
+            if (warnings.length > 0 && isSelected) {
+              // SEO warnings handled silently
+            }
+          }
+
+          const RichTextEditor = () => (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-auto">
+                <div className="border-b p-4 flex flex-wrap gap-2 bg-gray-50 rounded-t-lg">
+                  <button
+                    className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium"
+                    onClick={() => document.execCommand('bold')}
+                    type="button">
+                    <strong>B</strong>
+                  </button>
+                  <button
+                    className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium"
+                    onClick={() => document.execCommand('italic')}
+                    type="button">
+                    <em>I</em>
+                  </button>
+                  <button
+                    className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium"
+                    onClick={() => document.execCommand('underline')}
+                    type="button">
+                    <u>U</u>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Color:</span>
+                    <input
+                      type="color"
+                      className="w-8 h-8 cursor-pointer border rounded"
+                      onChange={(e) => document.execCommand('foreColor', false, e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex-1"></div>
+
+                  <button
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm font-medium"
+                    onClick={() => setIsEditing(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm font-medium"
+                    onClick={() => {
+                      const content = document.getElementById('rich-text-editor')?.innerHTML || ''
+                      handleTextUpdate(content)
+                      setIsEditing(false)
+                    }}>
+                    Save Changes
+                  </button>
+                </div>
+
+                <div className="p-6">
+                  <div
+                    id="rich-text-editor"
+                    contentEditable
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(localText) }}
+                    className="min-h-[200px] max-h-[50vh] overflow-y-auto p-4 border rounded focus:outline-none focus:border-blue-400 prose prose-lg"
+                    style={{
+                      fontSize: propsToUse?.fontSize || '32px',
+                      fontWeight: propsToUse?.fontWeight || 'bold',
+                      fontFamily: propsToUse?.fontFamily || 'system-ui, sans-serif',
+                      lineHeight: propsToUse?.lineHeight || '1.2',
+                    }}
+                  />
+
+                  <div className="mt-3 text-sm text-gray-500 text-right">
+                    Characters: {localText.replace(/<[^>]*>/g, '').length}
+                    {propsToUse?.seoMaxLength && (
+                      <span
+                        className={localText.replace(/<[^>]*>/g, '').length > propsToUse.seoMaxLength ? 'text-red-500 ml-2' : 'text-green-500 ml-2'}>
+                        / {propsToUse.seoMaxLength} (SEO recommended)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+
+          const headingStyle = {
+            backgroundColor: isSelected ? '#f0f9ff' : 'transparent',
+            border: isSelected ? '2px solid #3b82f6' : '1px dashed #d1d5db',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }
+
+          return (
+            <div className={`relative ${isSelected ? 'ring-2 ring-blue-400' : ''}`} onClick={handleClick} style={headingStyle}>
+              {!isEditing && (
+                <div
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    setIsEditing(true)
+                  }}
+                  className="cursor-pointer p-4">
+                  <AdvancedHeading {...propsToUse} text={localText} componentId={component.id} onSeoWarning={handleSeoWarning} />
+
+                  {isSelected && (
+                    <div className="absolute -top-3 -right-3 bg-blue-500 text-white text-xs px-3 py-1 rounded-full shadow-lg flex items-center gap-2">
+                      <span>✏️</span>
+                      <span>Rich Text</span>
+                    </div>
+                  )}
+
+                  <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-5 transition-all rounded flex items-center justify-center opacity-0 hover:opacity-100 pointer-events-none">
+                    <div className="bg-white px-4 py-2 rounded shadow text-sm text-gray-600 border">Double-click to edit rich text</div>
+                  </div>
+                </div>
+              )}
+
+              {isEditing && <RichTextEditor />}
+            </div>
+          )
+        }
+
+        case 'advancedparagraph': {
+          const [isEditing, setIsEditing] = useState(false)
+          const [localText, setLocalText] = useState(propsToUse?.text || 'Paragraph text...')
+
+          useEffect(() => {
+            setLocalText(propsToUse?.text || 'Paragraph text...')
+          }, [propsToUse?.text])
+
+          const handleTextUpdate = (newText: string) => {
+            setLocalText(newText)
+            handleUpdate({ ...propsToUse, text: newText })
+          }
+
+          const paragraphStyle = {
+            backgroundColor: isSelected ? '#f0f9ff' : 'transparent',
+            border: isSelected ? '2px solid #3b82f6' : '1px dashed #d1d5db',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            padding: '8px',
+          }
+
+          return (
+            <div className={`relative ${isSelected ? 'ring-2 ring-blue-400' : ''}`} onClick={handleClick} style={paragraphStyle}>
+              {!isEditing && (
+                <div
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    setIsEditing(true)
+                  }}
+                  className="cursor-pointer">
+                  <AdvancedParagraph
+                    {...propsToUse}
+                    text={localText}
+                    onUpdate={handleUpdate}
+                    componentId={component.id}
+                    onComponentUpdate={onComponentUpdate}
+                  />
+
+                  {isSelected && (
+                    <div className="absolute -top-3 -right-3 bg-blue-500 text-white text-xs px-3 py-1 rounded-full shadow-lg flex items-center gap-2">
+                      <span>✏️</span>
+                      <span>Rich Text</span>
+                    </div>
+                  )}
+
+                  <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-5 transition-all rounded flex items-center justify-center opacity-0 hover:opacity-100 pointer-events-none">
+                    <div className="bg-white px-4 py-2 rounded shadow text-sm text-gray-600 border">Double-click to edit rich text</div>
+                  </div>
+                </div>
+              )}
+
+              {isEditing && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-auto">
+                    <div className="border-b p-4 flex justify-between items-center bg-gray-50 rounded-t-lg">
+                      <h3 className="font-semibold">Edit Paragraph</h3>
+                      <div className="flex gap-2">
+                        <button
+                          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm font-medium"
+                          onClick={() => setIsEditing(false)}>
+                          Cancel
+                        </button>
+                        <button
+                          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm font-medium"
+                          onClick={() => setIsEditing(false)}>
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-6">
+                      <textarea
+                        value={localText.replace(/<[^>]*>/g, '')}
+                        onChange={(e) => handleTextUpdate(e.target.value)}
+                        className="w-full min-h-[200px] p-4 border rounded focus:outline-none focus:border-blue-400 resize-y"
+                        style={{
+                          fontSize: propsToUse?.fontSize || '16px',
+                          fontFamily: propsToUse?.fontFamily || 'inherit',
+                          lineHeight: propsToUse?.lineHeight || '1.6',
+                        }}
+                        autoFocus
+                      />
+                      <div className="mt-3 text-sm text-gray-500 text-right">Characters: {localText.replace(/<[^>]*>/g, '').length}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        }
+
+        case 'rich-text':
+          return <DynamicRichText component={component} onUpdate={handleUpdate} />
+
+        case 'quote':
+          return <DynamicQuote component={component} onUpdate={handleUpdate} />
+
+        case 'image':
+          return <DynamicImage component={component} onUpdate={handleUpdate} />
+
+        case 'video':
+          return <DynamicVideo component={component} onUpdate={handleUpdate} />
+
+        case 'icon':
+          return <DynamicIcon component={component} onUpdate={handleUpdate} />
+
+        case 'divider':
+          return <DynamicDivider component={component} onUpdate={handleUpdate} />
+
+        case 'swipercontainer':
+  return (
+    <SwiperContainer
+      {...propsToUse}
+      component={component}
+      onUpdate={handleUpdate}
+      onSelect={handleSelectForComponents}
+      onComponentSelect={onComponentSelect}
+      onComponentUpdate={onComponentUpdate}
+      sectionId={sectionId}
+      containerId={containerId}
+      rowId={rowId}
+      colId={colId}
+      carouselId={carouselId}
+      slideIndex={slideIndex}
+      setSelectedComponent={setSelectedComponent}
+      deleteComponent={deleteComponent}
+      parentComponentId={parentComponentId}
+      parentGridId={parentGridId}
+    />
+  )
+
+        case 'advancedbutton':
+          // Merge default props with actual props
+          const buttonProps = {
+            ...advancedButtonDefaultProps,
+            ...propsToUse,
+          }
+
+          return (
+            <AdvancedButton
+              {...buttonProps}
+              componentId={component.id}
+              onUpdate={handleUpdate}
+              onComponentUpdate={onComponentUpdate}
+              onSelect={handleSelectForComponents}
+            />
+          )
+
+        case 'advancedaccordion':
+          // Merge default props with actual props
+          const accordionProps = {
+            ...advancedAccordionDefaultProps,
+            ...propsToUse,
+            // Ensure items is always an array
+            items: Array.isArray(propsToUse?.items) && propsToUse.items.length > 0 ? propsToUse.items : advancedAccordionDefaultProps.items,
+          }
+
+          return (
+            <AdvancedAccordion
+              {...accordionProps}
+              componentId={component.id}
+              onUpdate={handleUpdate}
+              onComponentUpdate={onComponentUpdate}
+              onSelect={handleSelectForComponents}
+            />
+          )
+
+        case 'tabs':
+          return <DynamicTabs component={component} onUpdate={handleUpdate} />
+
+        case 'advancedlist':
+          // Merge default props with actual props - SAME AS ACCORDION
+          const listProps = {
+            ...advancedListDefaultProps,
+            ...propsToUse,
+            // Ensure items is always an array - SAME AS ACCORDION
+            items: Array.isArray(propsToUse?.items) && propsToUse.items.length > 0 ? propsToUse.items : advancedListDefaultProps.items,
+          }
+
+          return (
+            <AdvancedList
+              {...listProps}
+              componentId={component.id}
+              onUpdate={handleUpdate}
+              onComponentUpdate={onComponentUpdate}
+              onSelect={handleSelectForComponents}
+            />
+          )
+
+        case 'flex-box':
+          return <DynamicFlexBox component={component} onUpdate={handleUpdate} isSelected={isSelected} />
+
+        case 'advancedCard':
+          return (
+            <AdvancedCardComponent
+              {...propsToUse}
+              onUpdate={handleUpdate}
+              onSelect={handleSelectForComponents}
+              onComponentSelect={onComponentSelect}
+              onComponentUpdate={(newProps) => {
+                // ✅ Yeh already sahi hona chahiye
+                onComponentUpdate?.(component.id, newProps)
+              }}
+            />
+          )
+
+        case 'advancedImage': // ✅ CHANGE CASE HERE
+          return (
+            <AdvancedImageComponent
+              {...propsToUse}
+              onUpdate={handleUpdate}
+              onSelect={handleSelectForComponents}
+              onComponentUpdate={onComponentUpdate}
+            />
+          )
+
+        case 'NewGrid':
+          return (
+            <NewGrid
+              {...propsToUse}
+              component={component} // Pass the component itself
+              onUpdate={handleUpdate}
+              onSelect={handleSelectForComponents}
+              onComponentSelect={onComponentSelect} // ✅✅✅ YEH LINE ADD KARO
+              onComponentUpdate={onComponentUpdate}
+              sectionId={sectionId}
+              containerId={containerId}
+              rowId={rowId}
+              colId={colId}
+              carouselId={carouselId}
+              slideIndex={slideIndex}
+              setSelectedComponent={setSelectedComponent}
+              deleteComponent={deleteComponent}
+              layout={layout}
+              parentComponentId={parentComponentId}
+              parentGridId={parentGridId}
+              // Pass cells directly as props for immediate rendering
+              cells={propsToUse?.cells}
+            />
+          )
+
+        case 'carousel':
+          return (
+            <Carousel
+              {...propsToUse}
+              component={component}
+              onUpdate={handleUpdate}
+              onSelect={handleSelectForComponents}
+              onComponentSelect={onComponentSelect}
+              onComponentUpdate={onComponentUpdate}
+              sectionId={sectionId}
+              containerId={containerId}
+              rowId={rowId}
+              colId={colId}
+              carouselId={carouselId}
+              slideIndex={slideIndex}
+              setSelectedComponent={setSelectedComponent}
+              deleteComponent={deleteComponent}
+              parentComponentId={parentComponentId}
+              parentGridId={parentGridId}
+            />
+          )
+
+        default:
+          return <div>Unsupported component type: {component.type}</div>
+      }
+    }
+
+    return (
+      <div
+        ref={ref}
+        className={`relative w-full max-w-full h-auto overflow-x-hidden border-2 rounded transition-all duration-200 ${
+          isSelected ? 'border-blue-400 bg-blue-50 shadow-lg' : 'border-transparent hover:border-gray-300'
+        }`}
+        onClick={handleClick}
+        {...draggableProps}
+        {...dragHandleProps}>
+        {renderComponent()}
+
+        {isSelected && (
+          <div className="absolute -top-3 -left-3 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center shadow">
+            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
+        )}
+      </div>
+    )
+  }),
+)
+
+export const DynamicComponent = DynamicComponentInner

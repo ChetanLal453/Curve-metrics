@@ -1,15 +1,5 @@
 import type { Metadata } from 'next'
-import { Poppins } from 'next/font/google'
 import { DEFAULT_PAGE_TITLE } from '@/context/constants'
-import Image from 'next/image'
-
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['200', '300', '400', '500', '600', '700', '800'],
-  display: 'swap',
-})
-
-import logoDarkFull from '@/assets/images/logo-dark.png'
 
 import '@/assets/scss/app.scss'
 import './globals.css'
@@ -25,33 +15,8 @@ export const metadata: Metadata = {
 }
 
 const splashScreenStyles = `
-#splash-screen {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  background: white;
-  display: flex;
-  height: 100%;
-  width: 100%;
-  transform: translate(-50%, -50%);
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  opacity: 1;
-  transition: all 15s linear;
-  overflow: hidden;
-}
-
-#splash-screen.remove {
-  animation: fadeout 0.7s forwards;
-  z-index: 0;
-}
-
-@keyframes fadeout {
-  to {
-    opacity: 0;
-    visibility: hidden;
-  }
+body {
+  font-family: "Inter", system-ui, sans-serif;
 }
 `
 
@@ -64,11 +29,21 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <style suppressHydrationWarning>{splashScreenStyles}</style>
+        
+        {/* ✅ ADD FONTAWESOME CDN HERE - RIGHT AFTER THE STYLE TAG */}
+        <link
+          rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+          integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw=="
+          crossOrigin="anonymous"
+          referrerPolicy="no-referrer"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet" />
+        {/* END OF FONTAWESOME CDN */}
       </head>
-      <body className={poppins.className}>
-        <div id="splash-screen">
-          <Image alt="logo-text" src={logoDarkFull} style={{ height: '8%', width: 'auto' }} priority />
-        </div>
+      <body>
         <NextTopLoader color="#1e84c4" showSpinner={false} />
         <div id="__next_splash">
           <AppProvidersWrapper>{children}</AppProvidersWrapper>
