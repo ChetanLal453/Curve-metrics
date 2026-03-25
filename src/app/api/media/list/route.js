@@ -68,7 +68,7 @@ export async function GET(request) {
       ${fromClause}
     `
 
-    query += ' ORDER BY uploaded_at DESC, created_at DESC LIMIT ? OFFSET ?'
+    query += ' ORDER BY uploaded_at DESC LIMIT ? OFFSET ?'
     values.push(Math.max(limit, 1), Math.max(offset, 0))
 
     const [rows] = await pool.query(query, values)

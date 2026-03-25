@@ -26,6 +26,7 @@ type NavItem = {
 
 export default function DashboardPage() {
   const [pages, setPages] = useState<PageItem[]>([])
+  const [totalPages, setTotalPages] = useState(0)
   const [media, setMedia] = useState<MediaItem[]>([])
   const [navigation, setNavigation] = useState<NavItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,6 +46,7 @@ export default function DashboardPage() {
         ])
 
         const [pagesData, mediaData, navData] = await Promise.all([pagesRes.json(), mediaRes.json(), navRes.json()])
+        console.log('API RESPONSE:', pagesData)
 
         if (!pagesRes.ok || !mediaRes.ok || !navRes.ok) {
           throw new Error(pagesData.error || mediaData.error || navData.error || 'Failed to load dashboard data')
@@ -54,12 +56,18 @@ export default function DashboardPage() {
           return
         }
 
-        setPages(Array.isArray(pagesData.pages) ? pagesData.pages : [])
+        const nextPages = Array.isArray(pagesData?.pages) ? pagesData.pages : []
+        const nextTotal = typeof pagesData?.total === 'number' ? pagesData.total : nextPages.length
+
+        setPages(nextPages)
+        setTotalPages(nextTotal)
         setMedia(Array.isArray(mediaData.media) ? mediaData.media : [])
         setNavigation(Array.isArray(navData.items) ? navData.items : [])
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : 'Failed to load dashboard data')
+          setPages([])
+          setTotalPages(0)
         }
       } finally {
         if (active) {
@@ -76,6 +84,10 @@ export default function DashboardPage() {
 
   const livePages = useMemo(() => pages.filter((page) => page.status === 'live'), [pages])
   const draftPages = useMemo(() => pages.filter((page) => page.status === 'draft'), [pages])
+  const sortedPages = useMemo(
+    () => [...pages].sort((a, b) => Number(b?.id ?? 0) - Number(a?.id ?? 0)),
+    [pages],
+  )
   const totalNavItems = useMemo(() => {
     const countItems = (items: NavItem[]): number => items.reduce((total, item) => total + 1 + countItems(item.children || []), 0)
     return countItems(navigation)
@@ -84,7 +96,7 @@ export default function DashboardPage() {
   return (
     <div className="dash">
       <div className="dash-grid">
-        <div className="kpi"><div className="kpi-l">Total Pages</div><div className="kpi-v" style={{ color: 'var(--pu)' }}>{loading ? '...' : pages.length}</div><div className="kpi-ch"><span className="kpi-chip up">Live {livePages.length}</span><span>Draft {draftPages.length}</span></div></div>
+        <div className="kpi"><div className="kpi-l">Total Pages</div><div className="kpi-v" style={{ color: 'var(--pu)' }}>{loading ? '...' : totalPages}</div><div className="kpi-ch"><span className="kpi-chip up">Live {livePages.length}</span><span>Draft {draftPages.length}</span></div></div>
         <div className="kpi"><div className="kpi-l">Media Files</div><div className="kpi-v" style={{ color: 'var(--gr)' }}>{loading ? '...' : media.length}</div><div className="kpi-ch"><span className="kpi-chip good">Library</span><span>DB-backed</span></div></div>
         <div className="kpi"><div className="kpi-l">Navigation Items</div><div className="kpi-v" style={{ color: 'var(--am)' }}>{loading ? '...' : totalNavItems}</div><div className="kpi-ch"><span>{navigation.length} top-level</span></div></div>
         <div className="kpi"><div className="kpi-l">Status</div><div className="kpi-v" style={{ color: 'var(--rd)' }}>{error ? 'Error' : loading ? '...' : 'Ready'}</div><div className="kpi-ch"><span className={`kpi-chip ${error ? 'bad' : 'good'}`}>{error ? 'Needs attention' : 'Connected'}</span></div></div>
@@ -95,8 +107,19 @@ export default function DashboardPage() {
       <div className="dash-3col">
         <div className="dcard">
           <div className="dcard-h">Pages <span>Live data</span></div>
-          {(loading ? [] : pages.slice(0, 6)).map((page) => (
-            <div key={page.id} className="page-row"><span className={`status-pill ${page.status === 'live' ? 'sp-live' : 'sp-draft'}`}>{page.status}</span><span>{page.label || page.name}</span><span className="mono" style={{ marginLeft: 'auto' }}>{page.url}</span></div>
+          {(loading ? [] : sortedPages.slice(0, 6)).map((page) => (
+            <div key={page.id} className="dash-page-row">
+              <div className="dash-page-main">
+                <span className={`dash-page-dot ${page.status === 'live' ? 'is-live' : 'is-draft'}`} />
+                <div>
+                  <div className="feed-t">{page.label || page.name}</div>
+                  <div className="feed-m">{page.url}</div>
+                </div>
+              </div>
+              <span className={`nm-badge ${page.status === 'live' ? 'badge-live' : 'badge-draft'}`}>
+                {page.status === 'live' ? 'Live' : 'Draft'}
+              </span>
+            </div>
           ))}
           {!loading && !pages.length ? <div className="feed-m">No pages found.</div> : null}
         </div>
@@ -124,6 +147,74 @@ export default function DashboardPage() {
           {!loading && !navigation.length ? <div className="feed-m">No navigation configured.</div> : null}
         </div>
       </div>
+
+      <style jsx>{`
+        .nm-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 64px;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          padding: 5px 10px;
+          border-radius: 999px;
+        }
+
+        .badge-live {
+          background: var(--grd);
+          color: var(--grl);
+        }
+
+        .badge-draft {
+          background: var(--amd);
+          color: var(--aml);
+        }
+
+        .dash-page-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 10px 0;
+          border-bottom: 1px solid var(--b1);
+          transition: background 0.18s ease;
+        }
+
+        .dash-page-row:last-child {
+          border-bottom: none;
+        }
+
+        .dash-page-row:hover {
+          background: rgba(124, 92, 252, 0.04);
+        }
+
+        .dash-page-main {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+          flex: 1;
+        }
+
+        .dash-page-dot {
+          width: 9px;
+          height: 9px;
+          border-radius: 999px;
+          flex-shrink: 0;
+        }
+
+        .dash-page-dot.is-live {
+          background: var(--gr);
+          box-shadow: 0 0 0 4px var(--grd);
+        }
+
+        .dash-page-dot.is-draft {
+          background: var(--am);
+          box-shadow: 0 0 0 4px var(--amd);
+        }
+      `}</style>
     </div>
   )
 }

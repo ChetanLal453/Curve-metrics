@@ -58,13 +58,23 @@ async function getHeader(slug) {
   }
 
   const header = headerRows[0]
-  const [navRows] = await pool.execute(
+  let [navRows] = await pool.execute(
     `SELECT id, label, href, order_index, parent_id, open_new_tab
      FROM navigation_items
      WHERE header_id = ? AND is_active = TRUE
      ORDER BY order_index ASC, id ASC`,
     [header.id],
   )
+
+  // Fall back to the global navigation tree when the header has no dedicated items yet.
+  if (!navRows.length) {
+    ;[navRows] = await pool.execute(
+      `SELECT id, label, href, order_index, parent_id, open_new_tab
+       FROM navigation_items
+       WHERE header_id IS NULL AND is_active = TRUE
+       ORDER BY order_index ASC, id ASC`,
+    )
+  }
 
   return {
     ...header,

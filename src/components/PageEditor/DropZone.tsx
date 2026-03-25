@@ -80,9 +80,10 @@ export const DropZone: React.FC<DropZoneProps> = ({
   return (
     <div
       ref={setNodeRef}
+      data-drop-active={isOver && isValidDropZone}
       className={`relative transition-all duration-200 ${className} ${
         isOver && isValidDropZone
-          ? 'bg-blue-50 border-2 border-blue-300 border-dashed rounded-lg'
+          ? 'bg-blue-50/80 border-2 border-blue-300 border-dashed rounded-lg shadow-[0_0_0_1px_rgba(59,130,246,0.14)]'
           : ''
       } ${
         isDragging && isValidDropZone
@@ -98,8 +99,8 @@ export const DropZone: React.FC<DropZoneProps> = ({
 
       {/* Drop Indicator */}
       {showDropIndicator && isOver && isValidDropZone && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className="bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+        <div className="absolute inset-x-3 top-3 z-10 flex justify-center pointer-events-none">
+          <div className="rounded-full border border-blue-400/40 bg-blue-500 px-4 py-2 text-white shadow-[0_10px_30px_rgba(59,130,246,0.25)] flex items-center gap-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
@@ -108,6 +109,10 @@ export const DropZone: React.FC<DropZoneProps> = ({
             </span>
           </div>
         </div>
+      )}
+
+      {showDropIndicator && isOver && isValidDropZone && (
+        <div className="pointer-events-none absolute inset-x-4 top-2 z-[1] h-1 rounded-full bg-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.12)]" />
       )}
 
       {/* Placeholder for empty zones */}

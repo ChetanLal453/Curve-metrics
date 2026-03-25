@@ -213,12 +213,13 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
         <div className="rp-empty">
           <div className="rp-empty-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
-              <path d="M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+              <path d="M12 3 4.5 7v10L12 21l7.5-4V7L12 3Z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+              <path d="M12 12v9" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+              <path d="m4.5 7 7.5 5 7.5-5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
             </svg>
           </div>
-          <p>No component selected</p>
-          <span>Select a section or component on the canvas.</span>
+          <p>Select a component to edit its properties</p>
+          <span>Click a section, container, or component on the canvas to load its settings here.</span>
         </div>
       </div>
     )
@@ -361,14 +362,21 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
     return (
       <div className="right-inner">
         <div className="rp-empty">
+          <div className="rp-empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M12 3 4.5 7v10L12 21l7.5-4V7L12 3Z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+              <path d="M12 12v.01" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
+            </svg>
+          </div>
           <p>Component settings unavailable</p>
+          <span>Select a different component or reload the canvas to refresh the panel.</span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="right-inner">
+      <div className="right-inner">
       <div className="rp-top">
         <div className="rp-eye">Selected component</div>
         <div className="rp-name">{componentDef.name}</div>
@@ -390,6 +398,11 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       <div className="rp-body rp-panel-scroll">
         {activeTab === 'content' ? (
           <div className="rp-form">
+            <div className="rp-section-title">
+              <div className="rp-section-title-main">Typography</div>
+              <div className="rp-section-title-sub">Core text controls and alignment.</div>
+            </div>
+
             <div className="frow">
               <label className="flbl">Heading Text</label>
               <input className="fi" value={localProps[headingProp] || ''} onChange={(event) => handlePropChange(headingProp, event.target.value)} />
@@ -448,7 +461,10 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
               </div>
             </div>
 
-            <div className="rp-divider" />
+            <div className="rp-section-title rp-section-tight">
+              <div className="rp-section-title-main">Color & Behavior</div>
+              <div className="rp-section-title-sub">Visual emphasis and lightweight presentation controls.</div>
+            </div>
 
             <div className="frow">
               <label className="flbl">Color</label>
@@ -464,8 +480,6 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 ))}
               </div>
             </div>
-
-            <div className="rp-divider" />
 
             <div className="vis-box">
               {[
@@ -484,7 +498,10 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
             {extraContentFields.length ? (
               <>
-                <div className="rp-divider" />
+                <div className="rp-section-title rp-section-tight">
+                  <div className="rp-section-title-main">Advanced Fields</div>
+                  <div className="rp-section-title-sub">Additional properties exposed by the selected component.</div>
+                </div>
                 {extraContentFields.map(({ name, config }) => (
                   <PropertyField key={name} propName={name} config={config} value={localProps[name] ?? config.default} onChange={(value) => handlePropChange(name, value)} />
                 ))}
@@ -495,6 +512,11 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
         {activeTab === 'style' ? (
           <div className="rp-form">
+            <div className="rp-section-title">
+              <div className="rp-section-title-main">Layout</div>
+              <div className="rp-section-title-sub">Spacing and structure for the selected element.</div>
+            </div>
+
             <div className="frow">
               <label className="flbl">Padding</label>
               <div className="pad-box">
@@ -504,6 +526,11 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 <input className="pad-in right" value={paddingValue} onChange={(event) => handlePropChange('padding', event.target.value)} />
                 <input className="pad-in bottom" value={paddingValue} onChange={(event) => handlePropChange('padding', event.target.value)} />
               </div>
+            </div>
+
+            <div className="rp-section-title rp-section-tight">
+              <div className="rp-section-title-main">Surface</div>
+              <div className="rp-section-title-sub">Opacity, rounding, and border behavior.</div>
             </div>
 
             <div className="frow">
@@ -531,6 +558,11 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="rp-section-title rp-section-tight">
+              <div className="rp-section-title-main">Advanced</div>
+              <div className="rp-section-title-sub">Custom CSS and component-specific extras.</div>
             </div>
 
             <div className="frow">

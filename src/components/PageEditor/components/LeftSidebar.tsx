@@ -25,7 +25,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const [activeTab, setActiveTab] = useState<'library' | 'structure'>('library')
 
   return (
-    <div className="h-full flex flex-col bg-transparent text-[#eeeeff]">
+    <div className="h-full flex flex-col">
       <div className="lp-tabs">
         <button
           onClick={() => setActiveTab('library')}

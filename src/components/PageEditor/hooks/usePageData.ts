@@ -88,15 +88,18 @@ export const usePageData = (initialPageId?: string) => {
     setError(null)
 
     try {
-      const response = await fetch('/api/get-pages')
+      const response = await fetch('/api/pages')
       const data = await response.json()
+      console.log('API RESPONSE:', data)
 
       if (!response.ok || !data.success) {
         setError(data.error || 'Failed to fetch pages')
         return
       }
 
-      const pagesData: EditorPage[] = (data.pages || []).map((page: any) => ({
+      const pagesPayload = Array.isArray(data?.pages) ? data.pages : []
+
+      const pagesData: EditorPage[] = pagesPayload.map((page: any) => ({
         id: String(page.id),
         name: page.name || page.title || 'Untitled Page',
         title: page.title || page.name || 'Untitled Page',
@@ -152,7 +155,7 @@ export const usePageData = (initialPageId?: string) => {
     setError(null)
 
     try {
-      const response = await fetch(`/api/get-page?slug=${encodeURIComponent(currentPage.slug)}`)
+      const response = await fetch(`/api/page/${encodeURIComponent(currentPage.slug)}`)
       const data = await response.json()
 
       if (!response.ok || !data.success) {
@@ -167,7 +170,6 @@ export const usePageData = (initialPageId?: string) => {
         title: data.page?.title ?? currentPage.title,
       })
 
-      console.log('Loaded layout:', normalizedLayout)
       setLayout(normalizedLayout)
     } catch (loadError) {
       console.error('Error loading page:', loadError)
@@ -204,7 +206,6 @@ export const usePageData = (initialPageId?: string) => {
       sections: validatedSections,
     }
 
-    console.log('Saving layout:', validatedLayout)
     setLoading(true)
     setError(null)
 
@@ -245,7 +246,7 @@ export const usePageData = (initialPageId?: string) => {
     setError(null)
 
     try {
-      const response = await fetch('/api/create-page', {
+      const response = await fetch('/api/pages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),

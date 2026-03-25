@@ -2,21 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-type NavChild = {
-  id: number
-  label: string
-  url: string
-  status: 'live' | 'draft'
-}
-
 type NavItem = {
-  id: number
+  id: string
   label: string
   url: string
   status: 'live' | 'draft'
-  isDropdown: boolean
   newTab: boolean
-  children: NavChild[]
+  children: NavItem[]
 }
 
 type PagePoolItem = {
@@ -67,41 +59,93 @@ const defaultSocial: SocialForm = {
   whatsapp: '',
 }
 
+const createNavItem = (partial: Partial<NavItem> = {}): NavItem => ({
+  id: partial.id || `nav-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  label: partial.label || 'New Link',
+  url: partial.url || '/new-link',
+  status: partial.status === 'draft' ? 'draft' : 'live',
+  newTab: Boolean(partial.newTab),
+  children: Array.isArray(partial.children) ? partial.children : [],
+})
+
 function normalizeStatus(value: unknown): 'live' | 'draft' {
   return value === 'draft' ? 'draft' : 'live'
 }
 
 function normalizeNavItem(item: any): NavItem {
-  const children: NavChild[] = Array.isArray(item.children)
-    ? item.children.map((child: any) => ({
-        id: Number(child.id ?? 0),
-        label: child.label || 'Sub Link',
-        url: child.url || child.href || '/sub-link',
-        status: normalizeStatus(child.status),
-      }))
-    : []
-
-  return {
-    id: Number(item.id ?? 0),
-    label: item.label || 'New Link',
-    url: item.url || item.href || '/new-link',
-    status: normalizeStatus(item.status),
-    isDropdown: item.is_dropdown != null ? Boolean(item.is_dropdown) : children.length > 0,
-    newTab: item.new_tab != null ? Boolean(item.new_tab) : Boolean(item.open_new_tab),
-    children,
-  }
+  return createNavItem({
+    id: String(item?.id || ''),
+    label: item?.label || 'New Link',
+    url: item?.url || item?.href || '/new-link',
+    status: normalizeStatus(item?.status),
+    newTab: item?.new_tab != null ? Boolean(item.new_tab) : Boolean(item?.open_new_tab),
+    children: Array.isArray(item?.children) ? item.children.map(normalizeNavItem) : [],
+  })
 }
 
-function flattenTree(items: NavItem[]): NavItem[] {
+function flattenTree(items: NavItem[], depth = 0): Array<NavItem & { depth: number }> {
+  return items.flatMap((item) => [
+    { ...item, depth },
+    ...flattenTree(item.children, depth + 1),
+  ])
+}
+
+function normalizeComparableUrl(url: string) {
+  const value = url.trim()
+  if (!value) {
+    return ''
+  }
+
+  if (value === '/') {
+    return '/'
+  }
+
+  return value.replace(/\/+$/, '')
+}
+
+function updateTree(items: NavItem[], targetId: string, updater: (item: NavItem) => NavItem): NavItem[] {
+  return items.map((item) =>
+    item.id === targetId
+      ? updater(item)
+      : {
+          ...item,
+          children: updateTree(item.children, targetId, updater),
+        },
+  )
+}
+
+function removeTreeItem(items: NavItem[], targetId: string): NavItem[] {
   return items
+    .filter((item) => item.id !== targetId)
+    .map((item) => ({
+      ...item,
+      children: removeTreeItem(item.children, targetId),
+    }))
+}
+
+function reorderItems<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  const next = [...items]
+  const [moved] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, moved)
+  return next
+}
+
+function moveTreeItem(items: NavItem[], parentId: string | null, fromIndex: number, toIndex: number): NavItem[] {
+  if (parentId === null) {
+    return reorderItems(items, fromIndex, toIndex)
+  }
+
+  return updateTree(items, parentId, (item) => ({
+    ...item,
+    children: reorderItems(item.children, fromIndex, toIndex),
+  }))
 }
 
 export default function LayoutPage() {
   const [navData, setNavData] = useState<NavItem[]>([])
   const [pages, setPages] = useState<PagePoolItem[]>([])
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({})
-  const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [idCounter, setIdCounter] = useState(1000)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [headerForm, setHeaderForm] = useState<HeaderForm>(defaultHeader)
   const [footerForm, setFooterForm] = useState<FooterForm>(defaultFooter)
   const [socialForm, setSocialForm] = useState<SocialForm>(defaultSocial)
@@ -110,21 +154,70 @@ export default function LayoutPage() {
   const [layoutSaving, setLayoutSaving] = useState(false)
   const [showNavSaved, setShowNavSaved] = useState(false)
   const [toast, setToast] = useState('')
+  const [newLinkLabel, setNewLinkLabel] = useState('')
+  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [newLinkParentId, setNewLinkParentId] = useState('root')
+  const [dragState, setDragState] = useState<{ parentId: string | null; index: number } | null>(null)
+  const [builderMessage, setBuilderMessage] = useState('')
 
-  const selectedTopLevel = useMemo(
-    () => navData.find((item) => item.id === selectedId) || null,
-    [navData, selectedId],
+  const flattenedNav = useMemo(() => flattenTree(navData), [navData])
+  const selectedItem = useMemo(
+    () => flattenedNav.find((item) => item.id === selectedId) || null,
+    [flattenedNav, selectedId],
   )
+  const parentLabels = useMemo(() => {
+    const map: Record<string, string> = {}
 
-  const selectedParent = useMemo(
-    () => navData.find((item) => item.children.some((child) => child.id === selectedId)) || null,
-    [navData, selectedId],
-  )
+    const visit = (items: NavItem[], parentLabel = 'Top level') => {
+      items.forEach((item) => {
+        map[item.id] = parentLabel
+        visit(item.children, item.label || 'Untitled Link')
+      })
+    }
 
-  const selectedChild = useMemo(
-    () => selectedParent?.children.find((child) => child.id === selectedId) || null,
-    [selectedParent, selectedId],
-  )
+    visit(navData)
+    return map
+  }, [navData])
+  const validationErrors = useMemo(() => {
+    const urlCounts = flattenedNav.reduce<Record<string, number>>((acc, item) => {
+      const key = normalizeComparableUrl(item.url)
+      if (key) {
+        acc[key] = (acc[key] || 0) + 1
+      }
+      return acc
+    }, {})
+
+    return flattenedNav.reduce<Record<string, string[]>>((acc, item) => {
+      const issues: string[] = []
+      if (!item.label.trim()) {
+        issues.push('Label is required.')
+      }
+
+      const comparableUrl = normalizeComparableUrl(item.url)
+      if (comparableUrl && urlCounts[comparableUrl] > 1) {
+        issues.push('URL must be unique across navigation items.')
+      }
+
+      if (issues.length) {
+        acc[item.id] = issues
+      }
+      return acc
+    }, {})
+  }, [flattenedNav])
+  const newLinkErrors = useMemo(() => {
+    const issues: string[] = []
+    if (newLinkLabel && !newLinkLabel.trim()) {
+      issues.push('Label is required.')
+    }
+
+    const comparableUrl = normalizeComparableUrl(newLinkUrl)
+    if (comparableUrl && flattenedNav.some((item) => normalizeComparableUrl(item.url) === comparableUrl)) {
+      issues.push('URL already exists in navigation.')
+    }
+
+    return issues
+  }, [flattenedNav, newLinkLabel, newLinkUrl])
+  const hasNavValidationErrors = Object.keys(validationErrors).length > 0
 
   useEffect(() => {
     let active = true
@@ -140,7 +233,7 @@ export default function LayoutPage() {
           fetch('/api/settings', { credentials: 'include' }),
         ])
 
-        const [navData, pagesData, headersData, footersData, settingsData] = await Promise.all([
+        const [navPayload, pagesData, headersData, footersData, settingsData] = await Promise.all([
           navRes.json(),
           pagesRes.json(),
           headersRes.json(),
@@ -152,37 +245,36 @@ export default function LayoutPage() {
           return
         }
 
-        const nextNav: NavItem[] = Array.isArray(navData?.items)
-          ? navData.items.map(normalizeNavItem)
-          : Array.isArray(navData?.navigation)
-            ? navData.navigation.map(normalizeNavItem)
+        console.log('API RESPONSE:', navPayload)
+        console.log('API RESPONSE:', pagesData)
+
+        const nextNav = Array.isArray(navPayload?.items)
+          ? navPayload.items.map(normalizeNavItem)
+          : Array.isArray(navPayload?.navigation)
+            ? navPayload.navigation.map(normalizeNavItem)
             : []
 
         setNavData(nextNav)
         setExpanded(
-          nextNav.reduce((acc: Record<number, boolean>, item: NavItem) => {
+          flattenTree(nextNav).reduce<Record<string, boolean>>((acc, item) => {
             if (item.children.length) {
-              acc[item.id] = false
+              acc[item.id] = true
             }
             return acc
           }, {}),
         )
-        setIdCounter(
-          Math.max(
-            1000,
-            ...nextNav.flatMap((item) => [item.id, ...item.children.map((child) => child.id)]),
-          ),
-        )
 
         setPages(
           Array.isArray(pagesData?.pages)
-            ? pagesData.pages.map((page: any) => ({
-                id: page.id,
-                name: page.name || page.label || 'Untitled Page',
-                label: page.label || page.name || 'Untitled Page',
-                url: page.url || '/',
-                status: normalizeStatus(page.status),
-              }))
+            ? [...pagesData.pages]
+                .map((page: any) => ({
+                  id: page.id,
+                  name: page.name || page.label || 'Untitled Page',
+                  label: page.label || page.name || 'Untitled Page',
+                  url: page.url || '/',
+                  status: normalizeStatus(page.status),
+                }))
+                .sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))
             : [],
         )
 
@@ -246,169 +338,104 @@ export default function LayoutPage() {
     return () => window.clearTimeout(timer)
   }, [showNavSaved])
 
-  const addTopLevel = () => {
-    const nextId = idCounter + 1
-    const nextItem: NavItem = {
-      id: nextId,
-      label: 'New Link',
-      url: '/new-link',
-      status: 'draft',
-      isDropdown: false,
-      newTab: false,
-      children: [],
-    }
+  const availablePages = useMemo(() => {
+    const existingUrls = new Set(flattenedNav.map((item) => item.url))
+    return pages.filter((page) => !existingUrls.has(page.url))
+  }, [flattenedNav, pages])
 
-    setNavData((prev) => [...prev, nextItem])
-    setSelectedId(nextId)
-    setIdCounter(nextId)
+  const parentOptions = useMemo(
+    () => [{ id: 'root', label: 'Top level' }, ...flattenedNav.map((item) => ({ id: item.id, label: `${'— '.repeat(item.depth)}${item.label}` }))],
+    [flattenedNav],
+  )
+
+  const addItemToTree = (item: NavItem, parentId: string | null = null) => {
+    setBuilderMessage('')
+    setNavData((current) => {
+      if (parentId === null) {
+        return [...current, item]
+      }
+
+      return updateTree(current, parentId, (parent) => ({
+        ...parent,
+        children: [...parent.children, item],
+      }))
+    })
+
+    if (parentId) {
+      setExpanded((current) => ({ ...current, [parentId]: true }))
+    }
+    setSelectedId(item.id)
   }
 
-  const addFromPage = (page: PagePoolItem) => {
-    const exists = navData.some((item) => item.url === page.url)
-    if (exists) {
-      window.alert('Already in navigation')
-      return
-    }
-
-    const nextId = idCounter + 1
-    const nextItem: NavItem = {
-      id: nextId,
-      label: page.label || page.name,
-      url: page.url,
-      status: page.status,
-      isDropdown: false,
-      newTab: false,
-      children: [],
-    }
-
-    setNavData((prev) => [...prev, nextItem])
-    setSelectedId(nextId)
-    setIdCounter(nextId)
-  }
-
-  const addExternal = () => {
-    const labelInput = document.getElementById('ext-label') as HTMLInputElement | null
-    const urlInput = document.getElementById('ext-url') as HTMLInputElement | null
-    const label = labelInput?.value.trim() || ''
-    const url = urlInput?.value.trim() || ''
+  const addCustomLink = () => {
+    const label = newLinkLabel.trim()
+    const url = newLinkUrl.trim()
 
     if (!label || !url) {
+      setBuilderMessage('Label and URL are required before adding a link.')
       return
     }
 
-    const nextId = idCounter + 1
-    const nextItem: NavItem = {
-      id: nextId,
-      label,
-      url,
-      status: 'live',
-      isDropdown: false,
-      newTab: true,
-      children: [],
+    if (newLinkErrors.length) {
+      setBuilderMessage(newLinkErrors[0])
+      return
     }
 
-    setNavData((prev) => [...prev, nextItem])
-    if (labelInput) labelInput.value = ''
-    if (urlInput) urlInput.value = ''
-    setSelectedId(nextId)
-    setIdCounter(nextId)
-  }
-
-  const addSubItem = (parentId: number) => {
-    const nextId = idCounter + 1
-    const nextChild: NavChild = {
-      id: nextId,
-      label: 'Sub Link',
-      url: '/sub-link',
-      status: 'draft',
-    }
-
-    setNavData((prev) =>
-      prev.map((item) =>
-        item.id === parentId
-          ? {
-              ...item,
-              isDropdown: true,
-              children: [...item.children, nextChild],
-            }
-          : item,
-      ),
-    )
-    setExpanded((prev) => ({ ...prev, [parentId]: true }))
-    setSelectedId(nextId)
-    setIdCounter(nextId)
-  }
-
-  const deleteItem = (id: number) => {
-    setNavData((prev) => prev.filter((item) => item.id !== id))
-    setSelectedId(null)
-  }
-
-  const deleteChild = (parentId: number, childId: number) => {
-    setNavData((prev) =>
-      prev.map((item) => {
-        if (item.id !== parentId) {
-          return item
-        }
-
-        const children = item.children.filter((child) => child.id !== childId)
-        return {
-          ...item,
-          children,
-          isDropdown: children.length === 0 ? false : item.isDropdown,
-        }
+    addItemToTree(
+      createNavItem({
+        label,
+        url,
+        status: 'live',
+        newTab: /^https?:\/\//i.test(url),
       }),
+      newLinkParentId === 'root' ? null : newLinkParentId,
     )
-    setSelectedId(null)
+
+    setNewLinkLabel('')
+    setNewLinkUrl('')
+    setNewLinkParentId('root')
   }
 
-  const moveItem = (id: number, dir: -1 | 1) => {
-    const index = navData.findIndex((item) => item.id === id)
-    const newIndex = index + dir
-
-    if (index < 0 || newIndex < 0 || newIndex >= navData.length) {
+  const addFromPage = (page: PagePoolItem, parentId: string | null = null) => {
+    const comparableUrl = normalizeComparableUrl(page.url)
+    if (flattenedNav.some((item) => normalizeComparableUrl(item.url) === comparableUrl)) {
+      setBuilderMessage('That page is already attached to the navigation.')
       return
     }
 
-    const next = [...navData]
-    ;[next[index], next[newIndex]] = [next[newIndex], next[index]]
-    setNavData(next)
-  }
-
-  const toggleExpand = (id: number) => {
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
-  }
-
-  const selectItem = (id: number) => {
-    setSelectedId(id)
-  }
-
-  const selectChild = (_parentId: number, childId: number) => {
-    setSelectedId(childId)
-  }
-
-  const updateTopLevel = (id: number, key: keyof Omit<NavItem, 'id' | 'children'>, val: string | boolean) => {
-    setNavData((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [key]: val } : item)),
+    addItemToTree(
+      createNavItem({
+        label: page.label || page.name,
+        url: page.url,
+        status: page.status,
+      }),
+      parentId,
     )
   }
 
-  const updateChild = (parentId: number, id: number, key: keyof Omit<NavChild, 'id'>, val: string) => {
-    setNavData((prev) =>
-      prev.map((item) =>
-        item.id === parentId
-          ? {
-              ...item,
-              children: item.children.map((child) =>
-                child.id === id ? { ...child, [key]: val } : child,
-              ),
-            }
-          : item,
-      ),
-    )
+  const addChildToSelected = () => {
+    if (!selectedId) {
+      return
+    }
+
+    addItemToTree(createNavItem({ status: 'draft' }), selectedId)
+  }
+
+  const deleteSelected = () => {
+    if (!selectedId) {
+      return
+    }
+
+    setNavData((current) => removeTreeItem(current, selectedId))
+    setSelectedId(null)
   }
 
   const saveNav = async () => {
+    if (hasNavValidationErrors) {
+      setToast('Fix navigation validation errors before saving.')
+      return
+    }
+
     setNavSaving(true)
     try {
       const response = await fetch('/api/navigation', {
@@ -418,10 +445,18 @@ export default function LayoutPage() {
         body: JSON.stringify({ items: navData }),
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to save navigation')
+      const data = await response.json()
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to save navigation')
       }
 
+      const savedTree = Array.isArray(data?.items)
+        ? data.items.map(normalizeNavItem)
+        : Array.isArray(data?.navigation)
+          ? data.navigation.map(normalizeNavItem)
+          : []
+
+      setNavData(savedTree)
       setShowNavSaved(true)
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Failed to save navigation')
@@ -471,21 +506,101 @@ export default function LayoutPage() {
     }
   }
 
-  const availablePages = useMemo(() => {
-    const urls = new Set(flattenTree(navData).map((item) => item.url))
-    return pages.filter((page) => !urls.has(page.url))
-  }, [navData, pages])
+  const renderNavTree = (items: NavItem[], parentId: string | null = null, depth = 0): React.ReactNode =>
+    items.map((item, index) => {
+      const isSelected = selectedId === item.id
+      const isExpanded = expanded[item.id] !== false
+      const hasChildren = item.children.length > 0
+      const itemErrors = validationErrors[item.id] || []
+
+      return (
+        <div key={item.id} className={`nav-node ${depth > 0 ? 'is-child' : ''}`}>
+          <div
+            draggable
+            className={`nav-row ${isSelected ? 'selected' : ''} ${item.status === 'draft' ? 'is-draft' : ''} ${itemErrors.length ? 'has-error' : ''}`}
+            style={{ paddingLeft: `${14 + depth * 22}px` }}
+            onClick={() => setSelectedId(item.id)}
+            onDragStart={() => setDragState({ parentId, index })}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => {
+              if (dragState && dragState.parentId === parentId && dragState.index !== index) {
+                setNavData((current) => moveTreeItem(current, parentId, dragState.index, index))
+              }
+              setDragState(null)
+            }}>
+            <button
+              type="button"
+              className={`nav-expand ${hasChildren ? '' : 'empty'}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                if (hasChildren) {
+                  setExpanded((current) => ({ ...current, [item.id]: !isExpanded }))
+                }
+              }}>
+              {hasChildren ? (isExpanded ? '▾' : '▸') : '•'}
+            </button>
+            <span className={`node-dot ${item.status === 'live' ? 'is-live' : 'is-draft'}`} />
+            <div className="nav-copy">
+              <div className="nav-title">{item.label}</div>
+              <div className="nav-url">{item.url}</div>
+            </div>
+            <div className="nav-badges">
+              <span className={`nm-badge ${item.status === 'live' ? 'badge-live' : 'badge-draft'}`}>
+                {item.status === 'live' ? 'Live' : 'Draft'}
+              </span>
+              <button
+                type="button"
+                className="nav-mini-btn"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  addItemToTree(createNavItem({ status: 'draft' }), item.id)
+                }}>
+                + Add Child
+              </button>
+              {item.children.length ? <span className="nm-badge badge-drop">{item.children.length} child</span> : null}
+              {item.newTab ? <span className="nm-badge badge-ext">New tab</span> : null}
+            </div>
+          </div>
+
+          {itemErrors.length ? (
+            <div className="nav-inline-error">
+              {itemErrors.map((message) => (
+                <div key={message}>{message}</div>
+              ))}
+            </div>
+          ) : null}
+
+          {hasChildren && isExpanded ? <div className="nav-children">{renderNavTree(item.children, item.id, depth + 1)}</div> : null}
+        </div>
+      )
+    })
+
+  const renderPreviewTree = (items: NavItem[], depth = 0): React.ReactNode =>
+    items.map((item) => (
+      <div key={`preview-${item.id}`} className={`preview-node ${item.status === 'draft' ? 'is-draft' : ''}`} style={{ marginLeft: depth ? `${depth * 18}px` : 0 }}>
+        <div className="preview-row">
+          <span className="preview-bullet">{item.children.length ? (expanded[item.id] === false ? '▶' : '▼') : '•'}</span>
+          <div>
+            <div className="preview-title">{item.label}</div>
+            <div className="preview-url">{item.url}</div>
+          </div>
+        </div>
+        {item.children.length && expanded[item.id] !== false ? (
+          <div className="preview-children">{renderPreviewTree(item.children, depth + 1)}</div>
+        ) : null}
+      </div>
+    ))
 
   return (
     <div className="layout-wrap">
       <div className="pg-hd">
         <div>
           <h2>Layout Editor</h2>
-          <p>Header, footer, navigation links — manage everything here</p>
+          <p>Navigation is database-driven and stored as a real tree with nested children.</p>
         </div>
         <div className="pg-actions">
           <button className="gbtn" type="button" onClick={() => window.open('/', '_blank', 'noopener,noreferrer')}>
-            Preview Header
+            Preview Site
           </button>
           <button className="gbtn pu" type="button" onClick={() => void saveAll()} disabled={layoutSaving}>
             {layoutSaving ? 'Saving...' : 'Save Layout'}
@@ -496,12 +611,12 @@ export default function LayoutPage() {
       <div className="ic layout-nav-manager">
         <div className="ic-h">
           <div>
-            <div className="layout-nav-title">Navigation Manager</div>
-            <div className="layout-nav-subtitle">Drag to reorder · Click item to edit</div>
+            <div className="layout-nav-title">Navigation Builder</div>
+            <div className="layout-nav-subtitle">Tree-based CMS navigation with nested children and ordering</div>
           </div>
           <div className="pg-actions">
-            <button className="gbtn" type="button" onClick={addTopLevel}>
-              + Add Link
+            <button className="gbtn" type="button" onClick={() => addItemToTree(createNavItem({ status: 'draft' }))}>
+              + Add Top Level Link
             </button>
             <button className="gbtn pu" type="button" onClick={() => void saveNav()} disabled={navSaving}>
               {navSaving ? 'Saving...' : 'Save Navigation'}
@@ -512,129 +627,22 @@ export default function LayoutPage() {
         <div className="layout-nav-grid">
           <div className="layout-nav-main nm-left">
             <div className="layout-nav-label">Live Preview</div>
-            <div className="layout-nav-preview">
-              {navData.map((item, index) => (
-                <span
-                  key={item.id}
-                  className={`prev-item ${item.isDropdown ? 'has-drop' : ''}`}
-                  onClick={() => selectItem(item.id)}>
-                  {item.label}
-                  {item.isDropdown ? ' ▾' : ''}
-                  {index < navData.length - 1 ? <span className="prev-sep" /> : null}
-                </span>
-              ))}
+            <div className="layout-preview-card">
+              {navData.length ? renderPreviewTree(navData) : <div className="layout-empty">Preview will appear as you add items.</div>}
             </div>
 
             <div className="layout-nav-label">Navigation Structure</div>
             <div className="nav-builder">
               {loading ? <div className="layout-empty">Loading navigation...</div> : null}
-              {!loading
-                ? navData.map((item) => {
-                    const hasChildren = item.children.length > 0
-                    const isExpanded = expanded[item.id] === true
-
-                    return (
-                      <div
-                        key={item.id}
-                        className={`nav-item ${selectedId === item.id ? 'selected' : ''}`}>
-                        <div className="nav-row" onClick={() => selectItem(item.id)}>
-                          <span className="drag-handle">⠿</span>
-                          <button
-                            type="button"
-                            className={`nav-expand ${hasChildren ? '' : 'empty'}`}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              if (hasChildren) {
-                                toggleExpand(item.id)
-                              }
-                            }}>
-                            {hasChildren ? (isExpanded ? '▾' : '▸') : ''}
-                          </button>
-                          <span className="nav-label">{item.label}</span>
-                          <span className="nav-url">{item.url}</span>
-                          <span className="nav-badges">
-                            <span className={`nm-badge ${item.status === 'live' ? 'badge-live' : 'badge-draft'}`}>{item.status}</span>
-                            {item.isDropdown ? <span className="nm-badge badge-drop">dropdown</span> : null}
-                            {item.newTab ? <span className="nm-badge badge-ext">↗</span> : null}
-                          </span>
-                          <span className="nav-actions">
-                            <button
-                              type="button"
-                              className="nav-act"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                moveItem(item.id, -1)
-                              }}>
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              className="nav-act"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                moveItem(item.id, 1)
-                              }}>
-                              ↓
-                            </button>
-                            <button
-                              type="button"
-                              className="nav-act del"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                deleteItem(item.id)
-                              }}>
-                              ⌫
-                            </button>
-                          </span>
-                        </div>
-
-                        {isExpanded && hasChildren ? (
-                          <div className="sub-items open">
-                            {item.children.map((child) => (
-                              <div
-                                key={child.id}
-                                className={`sub-item ${selectedId === child.id ? 'selected' : ''}`}
-                                onClick={() => selectChild(item.id, child.id)}>
-                                <span className="drag-handle sub-handle">⠿</span>
-                                <svg className="sub-connector" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
-                                  <path d="M2 2v6h10" strokeLinecap="round" />
-                                </svg>
-                                <span className="nav-label">{child.label}</span>
-                                <span className="nav-url">{child.url}</span>
-                                <span className="nav-badges">
-                                  <span className={`nm-badge ${child.status === 'live' ? 'badge-live' : 'badge-draft'}`}>{child.status}</span>
-                                </span>
-                                <span className="nav-actions">
-                                  <button
-                                    type="button"
-                                    className="nav-act del"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      deleteChild(item.id, child.id)
-                                    }}>
-                                    ⌫
-                                  </button>
-                                </span>
-                              </div>
-                            ))}
-                            <button type="button" className="add-sub" onClick={() => addSubItem(item.id)}>
-                              ＋ Add sub-link under {item.label}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    )
-                  })
-                : null}
+              {!loading && navData.length ? renderNavTree(navData) : null}
+              {!loading && !navData.length ? <div className="layout-empty">No navigation items yet. Add your first link from the right panel.</div> : null}
             </div>
 
-            <button type="button" className="add-zone nm-add-zone cm-layout-add-zone" onClick={addTopLevel}>
-              + Add top-level link — or pick a page from the right panel
-            </button>
+            {builderMessage ? <div className="nav-inline-error standalone">{builderMessage}</div> : null}
 
             {showNavSaved ? (
               <div className="layout-save-note">
-                Navigation saved. Public site will reflect changes on next page load.
+                Navigation saved. Parent and child links will render from the database on the public site.
               </div>
             ) : null}
           </div>
@@ -642,100 +650,125 @@ export default function LayoutPage() {
           <div className="layout-nav-side nm-right">
             <div className="layout-nav-label">Edit Selected Item</div>
             <div className="layout-side-card">
-              {selectedId === null ? (
-                <div className="layout-side-empty">Click any nav item to edit it</div>
-              ) : selectedTopLevel ? (
+              {selectedItem ? (
                 <div className="layout-edit-panel">
+                  <div className="layout-side-note">
+                    Parent Item: <strong>{parentLabels[selectedItem.id] || 'Top level'}</strong>
+                  </div>
                   <div className="ig">
                     <label>Label</label>
-                    <input value={selectedTopLevel.label} onChange={(event) => updateTopLevel(selectedTopLevel.id, 'label', event.target.value)} />
+                    <input
+                      value={selectedItem.label}
+                      onChange={(event) =>
+                        setNavData((current) =>
+                          updateTree(current, selectedItem.id, (item) => ({ ...item, label: event.target.value })),
+                        )
+                      }
+                    />
+                    {validationErrors[selectedItem.id]?.includes('Label is required.') ? <div className="field-error">Label is required.</div> : null}
                   </div>
                   <div className="ig">
                     <label>URL / Path</label>
-                    <input value={selectedTopLevel.url} onChange={(event) => updateTopLevel(selectedTopLevel.id, 'url', event.target.value)} />
+                    <input
+                      value={selectedItem.url}
+                      onChange={(event) =>
+                        setNavData((current) =>
+                          updateTree(current, selectedItem.id, (item) => ({ ...item, url: event.target.value })),
+                        )
+                      }
+                    />
+                    {validationErrors[selectedItem.id]?.includes('URL must be unique across navigation items.') ? (
+                      <div className="field-error">URL must be unique across navigation items.</div>
+                    ) : null}
                   </div>
                   <div className="layout-toggles">
                     <div className="tgrow">
-                      <span className="tglbl">Has dropdown children</span>
+                      <span className="tglbl">Open in new tab</span>
                       <div
-                        className={`tg ${selectedTopLevel.isDropdown ? 'on' : ''}`}
-                        onClick={() => updateTopLevel(selectedTopLevel.id, 'isDropdown', !selectedTopLevel.isDropdown)}
+                        className={`tg ${selectedItem.newTab ? 'on' : ''}`}
+                        onClick={() =>
+                          setNavData((current) =>
+                            updateTree(current, selectedItem.id, (item) => ({ ...item, newTab: !item.newTab })),
+                          )
+                        }
                       />
                     </div>
                     <div className="tgrow">
-                      <span className="tglbl">Open in new tab</span>
-                      <div
-                        className={`tg ${selectedTopLevel.newTab ? 'on' : ''}`}
-                        onClick={() => updateTopLevel(selectedTopLevel.id, 'newTab', !selectedTopLevel.newTab)}
-                      />
+                      <span className="tglbl">Status</span>
+                      <select
+                        value={selectedItem.status}
+                        onChange={(event) =>
+                          setNavData((current) =>
+                            updateTree(current, selectedItem.id, (item) => ({
+                              ...item,
+                              status: normalizeStatus(event.target.value),
+                            })),
+                          )
+                        }>
+                        <option value="live">Live</option>
+                        <option value="draft">Draft</option>
+                      </select>
                     </div>
                   </div>
                   <div className="layout-edit-actions">
-                    <button type="button" className="gbtn danger-outline" onClick={() => deleteItem(selectedTopLevel.id)}>
-                      Delete
+                    <button type="button" className="gbtn" onClick={addChildToSelected}>
+                      + Add Child
                     </button>
-                    {selectedTopLevel.isDropdown ? (
-                      <button type="button" className="gbtn pu" onClick={() => addSubItem(selectedTopLevel.id)}>
-                        + Add sub-link
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : selectedParent && selectedChild ? (
-                <div className="layout-edit-panel">
-                  <div className="ig">
-                    <label>Label</label>
-                    <input
-                      value={selectedChild.label}
-                      onChange={(event) => updateChild(selectedParent.id, selectedChild.id, 'label', event.target.value)}
-                    />
-                  </div>
-                  <div className="ig">
-                    <label>URL / Path</label>
-                    <input
-                      value={selectedChild.url}
-                      onChange={(event) => updateChild(selectedParent.id, selectedChild.id, 'url', event.target.value)}
-                    />
-                  </div>
-                  <div className="layout-edit-actions">
-                    <button
-                      type="button"
-                      className="gbtn danger-outline"
-                      onClick={() => deleteChild(selectedParent.id, selectedChild.id)}>
+                    <button type="button" className="gbtn danger-outline" onClick={deleteSelected}>
                       Delete
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="layout-side-empty">Click any nav item to edit it</div>
+                <div className="layout-side-empty">Select a navigation item to edit it.</div>
               )}
             </div>
 
-            <div className="layout-nav-label">Add From Your Pages</div>
+            <div className="layout-nav-label">Add Link From Pages</div>
             <div className="layout-side-card">
+              <div className="ig">
+                <label>Parent Item</label>
+                <select value={newLinkParentId} onChange={(event) => setNewLinkParentId(event.target.value)}>
+                  {parentOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="layout-side-note">
+                  New links will be created under <strong>{parentOptions.find((option) => option.id === newLinkParentId)?.label || 'Top level'}</strong>.
+                </div>
+              </div>
               {availablePages.map((page) => (
-                <button key={page.url} type="button" className="pool-item" onClick={() => addFromPage(page)}>
+                <button
+                  key={page.url}
+                  type="button"
+                  className={`pool-item ${page.status === 'draft' ? 'is-draft' : ''}`}
+                  onClick={() => addFromPage(page, newLinkParentId === 'root' ? null : newLinkParentId)}>
                   <span className="dot" style={{ background: page.status === 'live' ? 'var(--gr)' : 'var(--am)' }} />
                   <span className="pool-name">{page.label || page.name}</span>
                   <span className="pool-url">{page.url}</span>
                   <span className="add-icon">+ add</span>
                 </button>
               ))}
-              {!availablePages.length ? <div className="layout-side-empty tight">All pages are already in the nav</div> : null}
+              {!availablePages.length ? <div className="layout-side-empty tight">All pages are already present in the navigation tree.</div> : null}
             </div>
 
-            <div className="layout-nav-label">Add External Link</div>
+            <div className="layout-nav-label">Add Custom Link</div>
             <div className="layout-side-card">
-              <div className="add-nav-row">
-                <input id="ext-label" className="add-nav-inp" placeholder="Label" />
-                <input id="ext-url" className="add-nav-inp" placeholder="URL" />
-                <button className="nav-act nav-add-btn" type="button" onClick={addExternal}>
-                  +
-                </button>
+              <div className="ig">
+                <label>Label</label>
+                <input value={newLinkLabel} onChange={(event) => setNewLinkLabel(event.target.value)} placeholder="Services" />
+                {!newLinkLabel.trim() && newLinkLabel.length > 0 ? <div className="field-error">Label is required.</div> : null}
               </div>
-              <div className="layout-side-note">
-                When you create a new page in Page Editor, it appears in &quot;Add from your pages&quot; above automatically.
+              <div className="ig">
+                <label>URL</label>
+                <input value={newLinkUrl} onChange={(event) => setNewLinkUrl(event.target.value)} placeholder="/services" />
+                {newLinkErrors.includes('URL already exists in navigation.') ? <div className="field-error">URL already exists in navigation.</div> : null}
               </div>
+              <button className="gbtn pu" type="button" onClick={addCustomLink}>
+                Add Link
+              </button>
             </div>
           </div>
         </div>
@@ -748,14 +781,11 @@ export default function LayoutPage() {
             <div className="ic-b">
               <div className="ig">
                 <label>Logo</label>
-                <div className="layout-upload-row">
-                  <div className="layout-upload-box">🖼</div>
-                  <input
-                    value={headerForm.logo_url}
-                    onChange={(event) => setHeaderForm((current) => ({ ...current, logo_url: event.target.value }))}
-                    placeholder="Logo URL"
-                  />
-                </div>
+                <input
+                  value={headerForm.logo_url}
+                  onChange={(event) => setHeaderForm((current) => ({ ...current, logo_url: event.target.value }))}
+                  placeholder="Logo URL"
+                />
               </div>
               <div className="ig">
                 <label>CTA Button Label</label>
@@ -768,7 +798,7 @@ export default function LayoutPage() {
               <div className="ig">
                 <label>Header Style</label>
                 <select value={headerForm.style} onChange={(event) => setHeaderForm((current) => ({ ...current, style: event.target.value }))}>
-                  <option value="sticky">Sticky (follows scroll)</option>
+                  <option value="sticky">Sticky</option>
                   <option value="fixed">Fixed top</option>
                   <option value="static">Static</option>
                 </select>
@@ -833,77 +863,144 @@ export default function LayoutPage() {
       {toast ? <div className="layout-toast">{toast}</div> : null}
 
       <style jsx global>{`
-        .nav-item {
-          background: var(--s1);
-          border: 1px solid var(--b1);
-          border-radius: 8px;
-          overflow: hidden;
-        }
-
-        .nav-item.selected {
-          border-color: rgba(124, 92, 252, 0.5);
-          background: var(--pud);
-        }
-
-        .nav-item .nav-row {
-          display: grid;
-          grid-template-columns: 14px 16px minmax(0, 1fr) minmax(84px, 120px) auto auto;
+        .nav-builder {
+          display: flex;
+          flex-direction: column;
           gap: 8px;
-          align-items: center;
-          padding: 7px 10px;
-          min-height: 36px;
         }
 
-        .nav-item.selected .nav-row {
+        .nav-node {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          position: relative;
+        }
+
+        .nav-node.is-child::before {
+          content: '';
+          position: absolute;
+          left: 16px;
+          top: -8px;
+          bottom: -8px;
+          width: 1px;
+          background: var(--b1);
+        }
+
+        .nav-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-height: 56px;
+          padding: 12px 14px;
+          border: 1px solid var(--b1);
+          border-radius: 12px;
+          background: var(--s1);
+          cursor: pointer;
+          transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+        }
+
+        .nav-row:hover {
+          border-color: rgba(124, 92, 252, 0.28);
+          background: var(--s2);
+          transform: translateY(-1px);
+        }
+
+        .nav-row.selected {
+          border-color: rgba(124, 92, 252, 0.52);
           background: var(--pud);
         }
 
-        .drag-handle {
-          cursor: grab;
-          color: var(--t4);
+        .nav-row.is-draft {
+          opacity: 0.74;
+        }
+
+        .nav-row.has-error {
+          border-color: rgba(233, 84, 84, 0.45);
         }
 
         .nav-expand {
-          width: 16px;
-          height: 16px;
+          width: 20px;
+          height: 20px;
           border: 1px solid var(--b2);
           background: var(--s3);
-          border-radius: 4px;
+          border-radius: 6px;
           color: var(--t2);
           display: inline-flex;
           align-items: center;
           justify-content: center;
           padding: 0;
+          flex-shrink: 0;
         }
 
         .nav-expand.empty {
-          opacity: 0;
-          pointer-events: none;
+          opacity: 0.72;
         }
 
-        .nav-label {
+        .node-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          flex-shrink: 0;
+        }
+
+        .node-dot.is-live {
+          background: var(--gr);
+          box-shadow: 0 0 0 4px var(--grd);
+        }
+
+        .node-dot.is-draft {
+          background: var(--am);
+          box-shadow: 0 0 0 4px var(--amd);
+        }
+
+        .nav-copy {
+          min-width: 0;
           flex: 1;
-          font-weight: 500;
+        }
+
+        .nav-title {
+          font-weight: 600;
           color: var(--t1);
         }
 
         .nav-url {
+          margin-top: 3px;
           font-family: monospace;
-          font-size: 9px;
+          font-size: 11px;
           color: var(--t3);
         }
 
         .nav-badges {
           display: flex;
-          gap: 3px;
           align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .nav-mini-btn {
+          border: 1px solid var(--b1);
+          background: var(--s2);
+          color: var(--t2);
+          border-radius: 999px;
+          padding: 5px 10px;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .nav-mini-btn:hover {
+          border-color: rgba(124, 92, 252, 0.4);
+          color: var(--pul);
+          background: var(--pud);
         }
 
         .nm-badge {
-          font-size: 8px;
-          font-weight: 600;
-          padding: 1px 6px;
-          border-radius: 10px;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 5px 9px;
+          border-radius: 999px;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
         }
 
         .badge-live {
@@ -926,83 +1023,72 @@ export default function LayoutPage() {
           color: var(--t3);
         }
 
-        .nav-actions {
+        .nav-children {
+          margin-left: 18px;
+          padding-left: 12px;
+          border-left: 1px dashed var(--b2);
+        }
+
+        .nav-inline-error {
+          margin: -2px 0 4px 40px;
+          padding: 8px 10px;
+          border-radius: 10px;
+          background: var(--rdd);
+          color: var(--rd);
+          font-size: 12px;
+        }
+
+        .nav-inline-error.standalone {
+          margin: 10px 0 0;
+        }
+
+        .layout-preview-card {
+          border: 1px solid var(--b1);
+          border-radius: 12px;
+          background: var(--s1);
+          padding: 14px;
+          margin-bottom: 14px;
+        }
+
+        .preview-node {
+          position: relative;
+        }
+
+        .preview-node.is-draft {
+          opacity: 0.66;
+        }
+
+        .preview-row {
           display: flex;
-          gap: 2px;
-          opacity: 0;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 8px 0;
         }
 
-        .nav-item:hover .nav-actions {
-          opacity: 1;
-        }
-
-        .nav-act {
-          width: 20px;
-          height: 20px;
-          background: var(--s3);
-          border: 1px solid var(--b2);
-          border-radius: 4px;
-          cursor: pointer;
-          color: var(--t2);
+        .preview-bullet {
+          width: 16px;
+          color: var(--t3);
+          flex-shrink: 0;
           display: inline-flex;
-          align-items: center;
           justify-content: center;
-          padding: 0;
         }
 
-        .nav-act:hover {
-          background: var(--s4);
+        .preview-title {
+          font-weight: 600;
           color: var(--t1);
         }
 
-        .nav-act.del:hover {
-          background: var(--rdd);
-          color: var(--rd);
+        .preview-url {
+          font-family: monospace;
+          font-size: 11px;
+          color: var(--t3);
+          margin-top: 2px;
         }
 
-        .sub-items {
-          background: var(--s2);
-          border-top: 1px solid var(--b1);
-        }
-
-        .sub-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 7px 10px;
-          border-bottom: 1px solid var(--b1);
-        }
-
-        .sub-item:hover {
-          background: var(--s3);
-        }
-
-        .sub-item.selected {
-          background: rgba(124, 92, 252, 0.08);
-        }
-
-        .sub-item .nav-label {
-          flex: 1;
-        }
-
-        .sub-connector {
-          color: var(--t4);
-          flex-shrink: 0;
-        }
-
-        .add-sub {
-          width: 100%;
-          padding-left: 40px;
-          color: var(--t4);
-          cursor: pointer;
-          text-align: left;
-          border: 1px dashed transparent;
-          background: transparent;
-        }
-
-        .add-sub:hover {
-          color: var(--pul);
-          background: var(--pud);
+        .preview-children {
+          margin-left: 8px;
+          padding-left: 14px;
+          border-left: 1px dashed var(--b2);
         }
 
         .tg {
@@ -1041,6 +1127,7 @@ export default function LayoutPage() {
           align-items: center;
           border-bottom: 1px solid var(--b1);
           padding: 5px 0;
+          gap: 12px;
         }
 
         .tgrow:last-child {
@@ -1055,10 +1142,11 @@ export default function LayoutPage() {
         .pool-item {
           display: flex;
           gap: 7px;
+          align-items: center;
           background: var(--s3);
           border: 1px solid var(--b1);
-          border-radius: 6px;
-          padding: 6px 9px;
+          border-radius: 8px;
+          padding: 8px 10px;
           cursor: pointer;
           margin-bottom: 6px;
         }
@@ -1069,18 +1157,16 @@ export default function LayoutPage() {
           background: var(--pud);
         }
 
-        .nm-add-zone {
-          border: 1px dashed var(--b3);
-          border-radius: 8px;
-          cursor: pointer;
+        .pool-item.is-draft {
+          opacity: 0.72;
         }
 
-        .nm-add-zone:hover {
-          border-color: var(--pu);
-          background: var(--pud);
+        .field-error {
+          margin-top: 6px;
+          font-size: 12px;
+          color: var(--rd);
         }
       `}</style>
     </div>
   )
 }
-

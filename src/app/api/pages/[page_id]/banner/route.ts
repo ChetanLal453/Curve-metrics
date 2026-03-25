@@ -3,8 +3,14 @@ import pool from '../../../../../lib/db.js'
 import { requireAdmin } from '../../../../../lib/require-admin.js'
 import { databaseErrorResponse, missingTableResponse, tableExists } from '../../../_utils/crud.js'
 
+type PageBannerState = {
+  id: number
+  banner_slug: string | null
+  updated_at: string | null
+}
+
 function logRequest(request: Request) {
-  console.log('[API]', request.method, request.url)
+  void request
 }
 
 function methodNotAllowed() {
@@ -36,7 +42,7 @@ async function fetchPageState(pageId: number) {
   const [rows] = await pool.query('SELECT id, banner_slug, updated_at FROM pages WHERE id = ? LIMIT 1', [
     pageId,
   ])
-  return rows[0] || null
+  return Array.isArray(rows) ? ((rows[0] as PageBannerState | undefined) ?? null) : null
 }
 
 async function updateBanner(request: Request, params: { page_id: string }) {

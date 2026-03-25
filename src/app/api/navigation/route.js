@@ -67,10 +67,40 @@ async function getNavigationColumns() {
 
 async function fetchNavigationTree() {
   const columns = await getNavigationColumns()
+  const query = [
+    `SELECT ${columns.join(', ')} FROM navigation_items`,
+    'WHERE header_id IS NULL',
+    'ORDER BY order_index ASC, id ASC',
+  ].join(' ')
+
+  const [rows] = await pool.execute(query)
+  return {
+    flat: rows,
+    tree: buildNavigationTree(rows),
+  }
+}
+
+function parseHeaderId(value) {
+  if (value == null || value === '') {
+    return null
+  }
+
+  const parsed = Number.parseInt(String(value), 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+async function fetchNavigationTreeForScope(headerId = null) {
+  const columns = await getNavigationColumns()
   const whereParts = []
+  const values = []
 
   if (columns.includes('header_id')) {
-    whereParts.push('header_id IS NULL')
+    if (headerId === null) {
+      whereParts.push('header_id IS NULL')
+    } else {
+      whereParts.push('header_id = ?')
+      values.push(headerId)
+    }
   }
 
   const query = [
@@ -81,7 +111,7 @@ async function fetchNavigationTree() {
     .filter(Boolean)
     .join(' ')
 
-  const [rows] = await pool.execute(query)
+  const [rows] = await pool.execute(query, values)
   return {
     flat: rows,
     tree: buildNavigationTree(rows),
@@ -104,7 +134,7 @@ function getRequestItems(body) {
   return null
 }
 
-async function replaceNavigationItems(connection, items = [], parentId = null) {
+async function replaceNavigationItems(connection, items = [], parentId = null, headerId = null) {
   const columns = await getNavigationColumns()
   const insertableColumns = columns.filter((column) => !['id', 'created_at', 'updated_at'].includes(column))
 
@@ -122,7 +152,7 @@ async function replaceNavigationItems(connection, items = [], parentId = null) {
       status: item.status || 'live',
       is_active: (item.status || 'live') !== 'draft',
       open_new_tab: Boolean(item.new_tab || item.open_new_tab),
-      header_id: null,
+      header_id: headerId,
     }
 
     const fields = insertableColumns.filter((column) => payload[column] !== undefined)
@@ -135,12 +165,12 @@ async function replaceNavigationItems(connection, items = [], parentId = null) {
 
     const children = Array.isArray(item.children) ? item.children : []
     if (children.length) {
-      await replaceNavigationItems(connection, children, result.insertId)
+      await replaceNavigationItems(connection, children, result.insertId, headerId)
     }
   }
 }
 
-export async function GET() {
+export async function GET(request) {
   const unauthorizedResponse = await requireAdmin()
   if (unauthorizedResponse) {
     return unauthorizedResponse
@@ -151,8 +181,10 @@ export async function GET() {
       return missingTableResponse('navigation_items')
     }
 
-    const { flat, tree } = await fetchNavigationTree()
-    return Response.json({ success: true, navigation: tree, items: tree, flat_items: flat })
+    const { searchParams } = new URL(request.url)
+    const headerId = parseHeaderId(searchParams.get('header_id'))
+    const { flat, tree } = await fetchNavigationTreeForScope(headerId)
+    return Response.json({ success: true, navigation: tree, items: tree, flat_items: flat, header_id: headerId })
   } catch (error) {
     console.error('Error fetching navigation items:', error)
     return Response.json({ success: false, error: 'Failed to fetch navigation items' }, { status: 500 })
@@ -172,6 +204,7 @@ export async function POST(request) {
 
     const body = await request.json()
     const items = getRequestItems(body)
+    const headerId = parseHeaderId(body?.header_id)
 
     if (!items) {
       return Response.json(
@@ -186,13 +219,17 @@ export async function POST(request) {
 
       const columns = await getNavigationColumns()
       if (columns.includes('header_id')) {
-        await connection.execute('DELETE FROM navigation_items WHERE header_id IS NULL')
+        if (headerId === null) {
+          await connection.execute('DELETE FROM navigation_items WHERE header_id IS NULL')
+        } else {
+          await connection.execute('DELETE FROM navigation_items WHERE header_id = ?', [headerId])
+        }
       } else {
         await connection.execute('DELETE FROM navigation_items')
       }
 
       if (items.length) {
-        await replaceNavigationItems(connection, items)
+        await replaceNavigationItems(connection, items, null, headerId)
       }
 
       await connection.commit()
@@ -203,9 +240,9 @@ export async function POST(request) {
       connection.release()
     }
 
-    const { tree } = await fetchNavigationTree()
+    const { tree } = await fetchNavigationTreeForScope(headerId)
     clearPublicPageBundleCache()
-    return Response.json({ success: true, navigation: tree, items: tree })
+    return Response.json({ success: true, navigation: tree, items: tree, header_id: headerId })
   } catch (error) {
     console.error('Error saving navigation items:', error)
     return Response.json({ success: false, error: 'Failed to save navigation items' }, { status: 500 })

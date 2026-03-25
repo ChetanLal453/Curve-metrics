@@ -66,35 +66,21 @@ export const DroppableSection: React.FC<DroppableSectionProps> = ({
   // Apply section settings to the MAIN wrapper (not header)
   const mainWrapperStyle: React.CSSProperties = {
     ...style,
-    // Background color - apply to ENTIRE section
     backgroundColor: sectionSettings?.backgroundColor || 'transparent',
-
-    // Margin
-    margin: sectionSettings?.margin 
-      ? (typeof sectionSettings.margin === 'number' 
-         ? `${sectionSettings.margin}px` 
-         : sectionSettings.margin)
+    margin: sectionSettings?.margin
+      ? typeof sectionSettings.margin === 'number'
+        ? `${sectionSettings.margin}px`
+        : sectionSettings.margin
       : undefined,
-    
-    // Border
-    border: sectionSettings?.borderWidth 
-      ? `${sectionSettings.borderWidth || 1}px solid ${sectionSettings.borderColor || '#e5e7eb'}`
+    marginBottom:
+      sectionSettings?.marginBottom ??
+      (typeof sectionSettings?.margin === 'string' && sectionSettings.margin.includes(' ') ? undefined : '60px'),
+    border: sectionSettings?.borderWidth
+      ? `${sectionSettings.borderWidth}px solid ${sectionSettings.borderColor || '#e5e7eb'}`
       : undefined,
-    
-    // Border Radius
-    borderRadius: sectionSettings?.borderRadius 
-      ? (typeof sectionSettings.borderRadius === 'number' 
-         ? `${sectionSettings.borderRadius}px` 
-         : sectionSettings.borderRadius)
-      : undefined,
-    
-    // Visibility - MOST IMPORTANT!
-    display: sectionSettings?.visible === false ? 'none' : 'block',
-    
-    // Use shadow property instead of boxShadow (from your types)
+    borderRadius: sectionSettings?.borderRadius || '10px',
     boxShadow: sectionSettings?.shadow || undefined,
-    
-    // Custom CSS - handle custom properties that might not be in the type
+    display: sectionSettings?.visible === false ? 'none' : 'block',
     ...(sectionSettings?.customCSS ? parseCustomCSS(sectionSettings.customCSS) : {})
   }
 
@@ -136,7 +122,8 @@ export const DroppableSection: React.FC<DroppableSectionProps> = ({
       ref={setNodeRef}
       style={mainWrapperStyle} // ✅ Apply section settings to MAIN wrapper
       {...attributes}
-      className={`sf group ${isSelected ? 'sel' : ''} ${isSortableDragging ? 'opacity-50' : ''}`}
+      data-selected={isSelected}
+      className={`sf group overflow-visible ${isSelected ? 'sel' : ''} ${isSortableDragging ? 'opacity-50' : ''}`}
       data-section-id={section.id}
       data-background-color={sectionSettings?.backgroundColor || 'none'}
       data-sticky-enabled={sectionSettings?.sticky_enabled || false}

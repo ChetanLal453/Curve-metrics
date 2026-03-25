@@ -1,22 +1,99 @@
 import Link from 'next/link'
 import { PageRenderer } from '@/components/PageRenderer'
 
-function NavigationList({ items = [] }) {
+type NavigationItem = {
+  id?: string | number
+  href?: string
+  open_new_tab?: boolean
+  label?: string
+  children?: NavigationItem[]
+}
+
+type PublicHeaderData = {
+  name?: string
+  logo?: string
+  cta_label?: string
+  cta_link?: string
+  navigation_items?: NavigationItem[]
+}
+
+type FooterLink = {
+  id?: string | number
+  href?: string
+  label?: string
+}
+
+type FooterColumn = {
+  id?: string | number
+  heading?: string
+  links?: FooterLink[]
+}
+
+type SocialLink = {
+  id?: string | number
+  url?: string
+  platform?: string
+}
+
+type PublicFooterData = {
+  name?: string
+  columns?: FooterColumn[]
+  social_links?: SocialLink[]
+  copyright?: string
+  settings?: {
+    logo_url?: string
+    copyright_text?: string
+  }
+}
+
+type PublicBannerData = {
+  name?: string
+  content?: {
+    title?: string
+    subtitle?: string
+    description?: string
+    buttonText?: string
+    button_text?: string
+    buttonLink?: string
+    button_link?: string
+  }
+}
+
+type PublicPageBundle = {
+  header?: PublicHeaderData | null
+  banner?: PublicBannerData | null
+  footer?: PublicFooterData | null
+  layout: any
+}
+
+function NavigationList({ items = [] }: { items?: NavigationItem[] }) {
   if (!items.length) {
     return null
   }
 
   return (
-    <ul className="m-0 flex list-none flex-wrap gap-4 p-0">
+    <ul className="m-0 flex list-none flex-col gap-2 p-0 md:flex-row md:flex-wrap md:gap-4">
       {items.map((item) => (
-        <li key={item.id} className="relative">
-          <Link href={item.href || '/'} target={item.open_new_tab ? '_blank' : undefined} rel={item.open_new_tab ? 'noreferrer noopener' : undefined} className="text-sm font-medium text-slate-700 no-underline">
-            {item.label || 'Link'}
-          </Link>
+        <li key={item.id} className="group relative">
+          <div className="flex items-center gap-2">
+            <Link
+              href={item.href || '/'}
+              target={item.open_new_tab ? '_blank' : undefined}
+              rel={item.open_new_tab ? 'noreferrer noopener' : undefined}
+              className="text-sm font-medium text-slate-700 no-underline">
+              {item.label || 'Link'}
+            </Link>
+            {item.children?.length ? <span className="text-xs text-slate-400">▾</span> : null}
+          </div>
           {item.children?.length ? (
-            <div className="mt-2 border-l border-slate-200 pl-4">
-              <NavigationList items={item.children} />
-            </div>
+            <>
+              <div className="mt-2 border-l border-slate-200 pl-4 md:hidden">
+                <NavigationList items={item.children} />
+              </div>
+              <div className="hidden min-w-[220px] rounded-2xl border border-slate-200 bg-white p-3 shadow-lg md:absolute md:left-0 md:top-full md:z-30 md:mt-3 md:group-hover:block">
+                <NavigationList items={item.children} />
+              </div>
+            </>
           ) : null}
         </li>
       ))}
@@ -24,7 +101,7 @@ function NavigationList({ items = [] }) {
   )
 }
 
-function PublicHeader({ header }) {
+function PublicHeader({ header }: { header?: PublicHeaderData | null }) {
   if (!header) {
     return null
   }
@@ -52,7 +129,7 @@ function PublicHeader({ header }) {
   )
 }
 
-function PublicBanner({ banner }) {
+function PublicBanner({ banner }: { banner?: PublicBannerData | null }) {
   if (!banner) {
     return null
   }
@@ -67,7 +144,7 @@ function PublicBanner({ banner }) {
         {content.subtitle ? <p className="mt-3 text-lg text-slate-600">{content.subtitle}</p> : null}
         {content.description ? <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">{content.description}</p> : null}
         {(content.buttonText || content.button_text) && (content.buttonLink || content.button_link) ? (
-          <Link href={content.buttonLink || content.button_link} className="mt-6 inline-flex rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white no-underline">
+          <Link href={content.buttonLink || content.button_link || '/'} className="mt-6 inline-flex rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white no-underline">
             {content.buttonText || content.button_text}
           </Link>
         ) : null}
@@ -76,7 +153,7 @@ function PublicBanner({ banner }) {
   )
 }
 
-function PublicFooter({ footer }) {
+function PublicFooter({ footer }: { footer?: PublicFooterData | null }) {
   if (!footer) {
     return null
   }
@@ -91,11 +168,11 @@ function PublicFooter({ footer }) {
           <div className="text-lg font-semibold text-slate-900">{footer.name || 'Footer'}</div>
           {footer.settings?.logo_url ? <img src={footer.settings.logo_url} alt={footer.name || 'Footer logo'} className="mt-4 h-10 w-auto" /> : null}
         </div>
-        {columns.map((column, index) => (
+        {columns.map((column: FooterColumn, index: number) => (
           <div key={column.id || `footer-column-${index + 1}`}>
             <div className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">{column.heading || `Column ${index + 1}`}</div>
             <div className="mt-3 flex flex-col gap-2">
-              {(column.links || []).map((link, linkIndex) => (
+              {(column.links || []).map((link: FooterLink, linkIndex: number) => (
                 <Link key={link.id || `footer-link-${index + 1}-${linkIndex + 1}`} href={link.href || '/'} className="text-sm text-slate-700 no-underline">
                   {link.label || 'Link'}
                 </Link>
@@ -106,7 +183,7 @@ function PublicFooter({ footer }) {
       </div>
       {socialLinks.length ? (
         <div className="mx-auto flex max-w-7xl flex-wrap gap-4 px-4 pb-4">
-          {socialLinks.map((link, index) => (
+          {socialLinks.map((link: SocialLink, index: number) => (
             <Link key={link.id || `social-${index + 1}`} href={link.url || '#'} className="text-sm text-slate-600 no-underline">
               {link.platform || 'Social'}
             </Link>
@@ -120,7 +197,7 @@ function PublicFooter({ footer }) {
   )
 }
 
-export function PublicPage({ bundle }) {
+export function PublicPage({ bundle }: { bundle: PublicPageBundle }) {
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <PublicHeader header={bundle.header} />

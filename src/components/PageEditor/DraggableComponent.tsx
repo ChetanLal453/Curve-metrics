@@ -124,25 +124,24 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className={`draggable-component relative mb-3 w-full max-w-full rounded-[10px] border bg-[#18181f] transition-all ${
-        isSortableDragging ? 'opacity-50' : ''
-      } ${isSelected ? 'border-[#7c5cfc] shadow-[0_0_0_1px_rgba(124,92,252,0.25)]' : 'border-white/10'}`}
+      data-selected={isSelected}
+      className={`draggable-component group relative mb-3 w-full max-w-full ${isSortableDragging ? 'opacity-50' : ''} ${isSelected ? 'is-selected' : ''}`}
       onClick={handleSelectClick}
     >
       {/* Drag Handle */}
       <div
         {...listeners}
-        className="absolute left-2 top-2 z-10 flex h-6 w-6 cursor-move items-center justify-center rounded bg-[#20202a] opacity-0 transition-opacity group-hover:opacity-100"
+        className="dc-handle"
         title="Drag to move"
         onClick={(e) => e.stopPropagation()}
       >
-        <svg className="h-3 w-3 text-[#8888aa]" fill="currentColor" viewBox="0 0 20 20">
+        <svg className="dc-handle-icon" fill="currentColor" viewBox="0 0 20 20">
           <path d="M3 4h14a1 1 0 010 2H3a1 1 0 010-2zM3 8h14a1 1 0 010 2H3a1 1 0 010-2zM3 12h14a1 1 0 010 2H3a1 1 0 010-2z"/>
         </svg>
       </div>
 
       {/* Component Content */}
-      <div className="w-full max-w-full h-auto p-3">
+      <div className="h-auto w-full p-4">
         <ResizableBox
           width={'100%' as any}
           height={component.height || 200}
@@ -155,23 +154,23 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
           className="w-full"
           style={{ maxWidth: '100%' }}
         >
-          <div className="h-auto w-full rounded-[8px] border border-white/5 bg-[#111116] p-2">
+          <div className="h-auto w-full">
             {renderComponent(component, { sectionId, containerId, rowId, colId })}
           </div>
 
           {/* Component Label */}
-          <div className="mt-2 text-center text-[9px] uppercase tracking-[0.08em] text-[#666680]">
+          <div className="dc-label">
             {component.label} ({component.type})
           </div>
         </ResizableBox>
       </div>
 
       {/* Action Buttons Top-Right */}
-      <div className="absolute right-0 top-0 z-20 m-2 flex gap-1 opacity-100 transition-opacity">
+      <div className="dc-actions">
         <button
           onClick={handleEditClick}
           disabled={isDeleted}
-          className="rounded bg-[#20202a] p-2 text-[#8888aa] transition-colors hover:bg-[#292935] hover:text-[#eeeeff] disabled:cursor-not-allowed disabled:opacity-50"
+          className="dc-action-btn"
           title="Edit Component"
         >
           <EditIcon size={16} />
@@ -179,7 +178,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
         <button
           onClick={handleDeleteClick}
           disabled={isDeleted}
-          className={`${isDeleted ? 'bg-[#50506a] cursor-wait' : 'bg-[#2a1d22] hover:bg-[#3a232c]'} rounded p-2 text-[#ff8aa0] transition-colors disabled:cursor-not-allowed disabled:opacity-70`}
+          className={`dc-action-btn is-danger ${isDeleted ? 'is-disabled' : ''}`}
           title="Delete Component"
         >
           <TrashIcon size={16} />
@@ -188,7 +187,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
 
       {/* Selection Indicator */}
       {isSelected && (
-        <div className="absolute right-12 top-2 h-3 w-3 rounded-full bg-[#7c5cfc]"></div>
+        <div className="dc-selected-dot"></div>
       )}
     </div>
   )

@@ -27,6 +27,8 @@ interface PageEditorProps {
   pageId?: string
 }
 
+const debugLog = (..._args: unknown[]) => {}
+
 const formatSaveStatus = (lastSaved: Date | null, isSaving: boolean, hasPendingChanges: boolean) => {
   if (isSaving) return 'Saving...'
   if (!lastSaved) return hasPendingChanges ? 'Unsaved changes' : 'Not saved yet'
@@ -395,7 +397,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           return
         }
 
-        const response = await fetch(`/api/get-page?slug=${encodeURIComponent(currentPage.slug)}`)
+        const response = await fetch(`/api/page/${encodeURIComponent(currentPage.slug)}`)
         const data = await response.json()
         if (!cancelled && data.success) {
           setSelectedHeaderSlug(data.page?.header_slug || '')
@@ -483,7 +485,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
   // ✅✅✅ FIXED handleComponentDelete function
   const handleComponentDelete = useCallback(
     (componentId: string, context?: any) => {
-      console.log('🎯 [PageEditor] handleComponentDelete CALLED:', {
+      debugLog('🎯 [PageEditor] handleComponentDelete CALLED:', {
         componentId,
         context,
         timestamp: new Date().toISOString(),
@@ -491,13 +493,13 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
       // ✅ Step 1: Clear selection if deleting selected component
       if (selectedComponent && selectedComponent.compId === componentId) {
-        console.log('🗑️ Clearing selected component')
+        debugLog('🗑️ Clearing selected component')
         setSelectedComponent(null)
       }
 
       // ✅ Step 2: Update layout state (FIXED LOGIC)
       setLayout((currentLayout) => {
-        console.log('🔄 Updating layout state...')
+        debugLog('🔄 Updating layout state...')
 
         const updatedLayout = JSON.parse(JSON.stringify(currentLayout))
         let componentDeleted = false
@@ -505,7 +507,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
         // 🎯 CHECK 1: Is this a NESTED component (inside Grid/Carousel)?
         if (context && (context.parentGridId || context.parentComponentId || context.gridId)) {
-          console.log('🔍 Processing NESTED component delete:', {
+          debugLog('🔍 Processing NESTED component delete:', {
             componentId,
             context,
           })
@@ -526,7 +528,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
                     // Check if this is a Grid component
                     if (comp.type === 'NewGrid' && comp.props && comp.props.cells) {
-                      console.log('🔍 Found Grid:', comp.id, 'checking cells...')
+                      debugLog('🔍 Found Grid:', comp.id, 'checking cells...')
 
                       // Search in grid cells
                       for (let rowIdx = 0; rowIdx < comp.props.cells.length; rowIdx++) {
@@ -534,7 +536,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                           const cell = comp.props.cells[rowIdx][colIdx]
 
                           if (cell.component && cell.component.id === componentId) {
-                            console.log('✅ Found component in Grid cell:', { rowIdx, colIdx })
+                            debugLog('✅ Found component in Grid cell:', { rowIdx, colIdx })
 
                             // Remove component from cell
                             comp.props.cells[rowIdx][colIdx] = {
@@ -544,7 +546,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
                             componentDeleted = true
                             deleteLocation = `grid[${comp.id}].cells[${rowIdx}][${colIdx}]`
-                            console.log('✅ Component removed from Grid')
+                            debugLog('✅ Component removed from Grid')
 
                             return true // Found and updated
                           }
@@ -554,7 +556,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
                     // 🎯 B. Check if it's inside a CAROUSEL
                     if (comp.type === 'carousel' && comp.props && comp.props.slides) {
-                      console.log('🔍 Found Carousel:', comp.id, 'checking slides...')
+                      debugLog('🔍 Found Carousel:', comp.id, 'checking slides...')
 
                       for (let slideIdx = 0; slideIdx < comp.props.slides.length; slideIdx++) {
                         const slide = comp.props.slides[slideIdx]
@@ -566,7 +568,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                           if (slide.components.length !== originalLength) {
                             componentDeleted = true
                             deleteLocation = `carousel[${comp.id}].slides[${slideIdx}]`
-                            console.log('✅ Component removed from Carousel slide')
+                            debugLog('✅ Component removed from Carousel slide')
                             return true
                           }
                         }
@@ -580,13 +582,13 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           }
 
           if (searchAndUpdateGrid()) {
-            console.log('✅✅✅ NESTED Component deleted successfully')
+            debugLog('✅✅✅ NESTED Component deleted successfully')
             toast.success('Component deleted successfully')
 
             // ✅ Auto-save after successful delete
             setTimeout(() => {
               saveLayout(updatedLayout).then((success) => {
-                console.log(success ? '💾 Nested component deletion saved' : '❌ Save failed')
+                debugLog(success ? '💾 Nested component deletion saved' : '❌ Save failed')
               })
             }, 0)
 
@@ -595,7 +597,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
         }
 
         // 🎯 CHECK 2: Is this a FIRST-LEVEL component?
-        console.log('🔍 Searching for FIRST-LEVEL component:', componentId)
+        debugLog('🔍 Searching for FIRST-LEVEL component:', componentId)
 
         for (let s = 0; s < updatedLayout.sections.length; s++) {
           const section = updatedLayout.sections[s]
@@ -612,7 +614,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
               if (column.components.length !== originalLength) {
                 componentDeleted = true
                 deleteLocation = `section[${s}].row[${r}].column[${c}]`
-                console.log('✅ First-level component removed:', deleteLocation)
+                debugLog('✅ First-level component removed:', deleteLocation)
                 break
               }
             }
@@ -622,7 +624,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
         }
 
         if (componentDeleted) {
-          console.log('✅✅✅ Component SUCCESSFULLY deleted from layout:', {
+          debugLog('✅✅✅ Component SUCCESSFULLY deleted from layout:', {
             componentId,
             deleteLocation,
           })
@@ -632,7 +634,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           // ✅ Auto-save
           setTimeout(() => {
             saveLayout(updatedLayout).then((success) => {
-              console.log(success ? '💾 Component deletion saved to database' : '❌ Database save failed')
+              debugLog(success ? '💾 Component deletion saved to database' : '❌ Database save failed')
             })
           }, 0)
         } else {
@@ -649,7 +651,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
   // ✅✅✅ COMPLETELY FIXED handleDragEnd function - HANDLES ALL DROP TYPES
   const handleDragEnd = useCallback(
     (result: any, draggedItem: any) => {
-      console.log('🎯 [FIXED] PageEditor: handleDragEnd called', {
+      debugLog('🎯 [FIXED] PageEditor: handleDragEnd called', {
         result,
         draggedItem,
         droppableId: result.destination?.droppableId,
@@ -657,7 +659,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
       })
 
       if (!result.destination) {
-        console.log('❌ No destination for drop')
+        debugLog('❌ No destination for drop')
         return
       }
 
@@ -683,17 +685,17 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
             sections: reorderedSections,
           }
 
-          console.log('🔀 Sections reordered:', {
+          debugLog('🔀 Sections reordered:', {
             sectionId,
             sourceIndex,
             destinationIndex,
             layout: nextLayout,
           })
-          console.log('Saving layout:', nextLayout)
+          debugLog('Saving layout:', nextLayout)
 
           setTimeout(() => {
             saveLayout(nextLayout).then((success) => {
-              console.log(success ? '💾 Section reorder saved' : '❌ Failed to save section reorder')
+              debugLog(success ? '💾 Section reorder saved' : '❌ Failed to save section reorder')
             })
           }, 0)
 
@@ -717,11 +719,11 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
         }
       }
 
-      console.log('🔧 Using component type:', componentType)
+      debugLog('🔧 Using component type:', componentType)
 
       // 🎯 1. Handle GRID CELL drops (HIGHEST PRIORITY)
       if (result.destination.droppableId?.startsWith('component:empty:grid:')) {
-        console.log('🏗️ Grid cell drop detected:', result.destination.droppableId)
+        debugLog('🏗️ Grid cell drop detected:', result.destination.droppableId)
 
         // Parse drop zone ID
         const dropZoneId = result.destination.droppableId
@@ -754,7 +756,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
             if (!gridComp.props.cells) {
               const rows = gridComp.props?.rows || 1
               const cols = gridComp.props?.columns || 3
-              console.log('🏗️ Initializing grid cells:', { rows, cols })
+              debugLog('🏗️ Initializing grid cells:', { rows, cols })
               gridComp.props.cells = Array(rows)
                 .fill(null)
                 .map(() =>
@@ -787,7 +789,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
               component: newComponent,
             }
 
-            console.log('✅ Component added to grid cell:', {
+            debugLog('✅ Component added to grid cell:', {
               rowIndex: rowIdx,
               colIndex: colIdx,
               componentType: compType,
@@ -806,7 +808,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
                   // Check if this is the target grid
                   if (comp.type === 'NewGrid' && comp.id === actualGridId) {
-                    console.log('🎯 Found target grid:', comp.id)
+                    debugLog('🎯 Found target grid:', comp.id)
                     if (updateGridCell(comp, rowIndex, colIndex, componentType)) {
                       gridUpdated = true
                       break
@@ -821,13 +823,13 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           }
 
           if (gridUpdated) {
-            console.log('✅✅✅ Grid updated successfully')
+            debugLog('✅✅✅ Grid updated successfully')
             toast.success('Component added to grid')
 
             // Auto-save
             setTimeout(() => {
               saveLayout(newLayout).then((success) => {
-                console.log(success ? '💾 Grid update saved' : '❌ Failed to save grid update')
+                debugLog(success ? '💾 Grid update saved' : '❌ Failed to save grid update')
               })
             }, 300)
           } else {
@@ -845,7 +847,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
       // 🎯 2. Handle SWIPER SLIDE drops (NEW)
       if (result.destination.droppableId?.startsWith('swiper-')) {
-        console.log('🔄 Swiper slide drop detected:', result.destination.droppableId)
+        debugLog('🔄 Swiper slide drop detected:', result.destination.droppableId)
 
         // Parse swiper ID and slide index from drop zone ID
         // Format: swiper-{swiperId}-slide-{slideIndex}
@@ -856,7 +858,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           const [, swiperId, slideIndexStr] = match
           const slideIndex = parseInt(slideIndexStr, 10)
 
-          console.log('🎯 Swiper drop parsed:', {
+          debugLog('🎯 Swiper drop parsed:', {
             swiperId,
             slideIndex,
             componentType,
@@ -878,7 +880,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                   comp.type === 'swipercontainer' && (comp.id === swiperId || comp.id === `swiper-${swiperId}` || comp.id.includes(swiperId))
 
                 if (isMatchingSwiper) {
-                  console.log('🎯 Found target swiper:', {
+                  debugLog('🎯 Found target swiper:', {
                     compId: comp.id,
                     swiperId,
                     hasSlides: !!comp.props?.slides,
@@ -900,7 +902,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
                   // Ensure slide exists at index
                   if (slideIndex >= comp.props.slides.length) {
-                    console.log('🆕 Creating missing slide at index:', slideIndex)
+                    debugLog('🆕 Creating missing slide at index:', slideIndex)
                     while (comp.props.slides.length <= slideIndex) {
                       comp.props.slides.push({
                         id: `slide-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -945,7 +947,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                   // Add to target slide
                   targetSlide.components.push(newComponent)
 
-                  console.log('✅ Component added to swiper slide:', {
+                  debugLog('✅ Component added to swiper slide:', {
                     slideIndex: slideIndex,
                     componentType,
                     componentId: newComponent.id,
@@ -1001,13 +1003,13 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
             }
 
             if (searchEverywhere()) {
-              console.log('✅ Swiper updated successfully - COMPLETE LAYOUT:', JSON.stringify(newLayout, null, 2))
+              debugLog('✅ Swiper updated successfully - COMPLETE LAYOUT:', JSON.stringify(newLayout, null, 2))
 
               // Auto-save
               if (saveLayout) {
                 setTimeout(() => {
                   saveLayout(newLayout).then((success) => {
-                    console.log(success ? '💾 Swiper update saved' : '❌ Failed to save swiper update')
+                    debugLog(success ? '💾 Swiper update saved' : '❌ Failed to save swiper update')
                   })
                 }, 300)
               }
@@ -1026,18 +1028,18 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
       // 🎯 2. Handle CAROUSEL drops
       if (result.destination.droppableId?.startsWith('component:carousel-')) {
-        console.log('🎠 Carousel drop detected')
+        debugLog('🎠 Carousel drop detected')
         layoutActionsHandleDragEnd(result, draggedItem)
         return
       }
 
       // 🎯 3. ✅✅✅ CRITICAL FIX: Handle COLUMN drops (FIXED FOR ALL COLUMNS)
       if (result.destination.droppableId?.startsWith('column:')) {
-        console.log('📦 Column drop detected:', result.destination.droppableId)
+        debugLog('📦 Column drop detected:', result.destination.droppableId)
 
         // Parse destination: column:sectionId:containerId:rowId:columnId
         const destParts = result.destination.droppableId.split(':')
-        console.log('🔍 Destination parts:', destParts)
+        debugLog('🔍 Destination parts:', destParts)
 
         // Handle both formats:
         // Format 1: column:sectionId:containerId:rowId:columnId (from PageEditorCanvas)
@@ -1056,7 +1058,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           return
         }
 
-        console.log('🔍 Column destination parsed:', { sectionId, containerId, rowId, columnId })
+        debugLog('🔍 Column destination parsed:', { sectionId, containerId, rowId, columnId })
 
         // Get component definition
         const componentDef = getComponentDefinition(componentType)
@@ -1074,7 +1076,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           props: componentDef.defaultProps ? { ...componentDef.defaultProps } : {},
         }
 
-        console.log('🎯 Creating new component for column:', newComponent.id)
+        debugLog('🎯 Creating new component for column:', newComponent.id)
 
         // Update layout - Add to specific column
         setLayout((prevLayout) => {
@@ -1100,7 +1102,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                           section.name = componentDef.name || componentType
                         }
 
-                        console.log('✅ Component added to column:', {
+                        debugLog('✅ Component added to column:', {
                           sectionName: section.name,
                           columnId,
                           columnIndex: row.columns.indexOf(col),
@@ -1113,7 +1115,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                         // Auto-save
                         setTimeout(() => {
                           saveLayout(newLayout).then((success) => {
-                            console.log(success ? '💾 Column drop saved' : '❌ Save failed')
+                            debugLog(success ? '💾 Column drop saved' : '❌ Save failed')
                           })
                         }, 300)
 
@@ -1130,7 +1132,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
           if (!componentAdded) {
             console.error('❌ Target column not found:', { sectionId, containerId, rowId, columnId })
-            console.log(
+            debugLog(
               '🔍 Available sections:',
               newLayout.sections.map((s: any) => ({
                 id: s.id,
@@ -1150,7 +1152,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
       }
 
       // 4. All other drops - use layoutActionsHandleDragEnd
-      console.log('📦 Processing other types of drops')
+      debugLog('📦 Processing other types of drops')
       layoutActionsHandleDragEnd(result, draggedItem)
     },
     [layoutActionsHandleDragEnd, setLayout, getComponentDefinition, saveLayout],
@@ -1227,7 +1229,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
         return // Already selected, don't do anything
       }
 
-      console.log('🎯 [PageEditor] Component selected (WITH NESTED CONTEXT):', {
+      debugLog('🎯 [PageEditor] Component selected (WITH NESTED CONTEXT):', {
         componentId: component.id,
         componentType: component.type,
         context,
@@ -1299,7 +1301,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
   const handleComponentUpdate = useCallback(
     (componentId: string, props: Record<string, any>) => {
-      console.log('🎯 [PageEditor] handleComponentUpdate called:', {
+      debugLog('🎯 [PageEditor] handleComponentUpdate called:', {
         componentId,
         props,
         imageProp: props.image,
@@ -1315,20 +1317,20 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
       // 🎯 DEBUG: Log the props being passed
       Object.keys(props).forEach((key) => {
-        console.log(`   📊 ${key}:`, typeof props[key], props[key]?.substring?.(0, 50) || props[key])
+        debugLog(`   📊 ${key}:`, typeof props[key], props[key]?.substring?.(0, 50) || props[key])
       })
 
       // 🎯 CRITICAL: Update the layout via the layout actions
-      console.log('🔄 Calling layoutActionsHandleComponentUpdate...')
+      debugLog('🔄 Calling layoutActionsHandleComponentUpdate...')
       layoutActionsHandleComponentUpdate(componentId, props)
 
       // 🎯 Optional: Add special handling for grid children
       if (componentId.includes('advancedCard') || componentId.includes('advancedImage')) {
-        console.log('🔍 Grid child component detected, ensuring update propagates')
+        debugLog('🔍 Grid child component detected, ensuring update propagates')
 
         // Trigger a force update for grids containing this component
         setLayout((prev) => {
-          console.log('🔄 Force updating layout for grid child')
+          debugLog('🔄 Force updating layout for grid child')
           return { ...prev }
         })
       }
@@ -1338,7 +1340,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
   const handleComponentDuplicate = useCallback((component: LayoutComponent) => {
     // TODO: Implement duplicate logic
-    console.log('Duplicate component:', component)
+    debugLog('Duplicate component:', component)
   }, [])
 
   const handleSectionSelect = useCallback((sectionId: string) => {
@@ -1349,7 +1351,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
   // ✅ UPDATED: handleSectionEdit for PropertyPanel integration
   const handleSectionEdit = useCallback(
     (sectionId: string) => {
-      console.log('🎯 [PageEditor] handleSectionEdit called:', {
+      debugLog('🎯 [PageEditor] handleSectionEdit called:', {
         sectionId,
         timestamp: new Date().toISOString(),
         currentSelectedSectionId: selectedSectionId,
@@ -1361,7 +1363,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
       setSelectedComponent(null)
 
       // ✅ DEBUG LOG
-      console.log('✅ Section selected for editing:', {
+      debugLog('✅ Section selected for editing:', {
         sectionId,
         selectedSectionId: sectionId,
         componentCleared: true,
@@ -1373,7 +1375,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
   // ✅✅✅ CRITICAL FIX: COMPLETELY FIXED handleSectionUpdate function
   const handleSectionUpdate = useCallback(
     (sectionId: string, updates: any) => {
-      console.log('🎯 [PageEditor] handleSectionUpdate called:', {
+      debugLog('🎯 [PageEditor] handleSectionUpdate called:', {
         sectionId,
         updates,
         hasSettings: !!updates.settings,
@@ -1423,7 +1425,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
             : currentSection.container
         }
 
-        console.log('✅✅✅ Section UPDATED in state:', {
+        debugLog('✅✅✅ Section UPDATED in state:', {
           beforeSettings: currentSection.settings,
           afterSettings: updatedSection.settings,
           backgroundColor: updatedSection.settings?.backgroundColor,
@@ -1444,7 +1446,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
         setLayout((currentLayout) => {
           const section = currentLayout.sections.find((s: Section) => s.id === sectionId)
           if (section) {
-            console.log('🔄 Updated selected section in state')
+            debugLog('🔄 Updated selected section in state')
           }
           return currentLayout
         })
@@ -1511,7 +1513,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
   const handleSectionDeleteCallback = useCallback(
     (sectionId: string) => {
-      console.log('🗑️ Deleting section:', sectionId)
+      debugLog('🗑️ Deleting section:', sectionId)
 
       // ✅ FIX: Use setLayout to get UPDATED layout
       setLayout((currentLayout) => {
@@ -1521,7 +1523,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           sections: currentLayout.sections.filter((s) => s.id !== sectionId),
         }
 
-        console.log('✅ Section removed:', {
+        debugLog('✅ Section removed:', {
           before: currentLayout.sections.length,
           after: updatedLayout.sections.length,
         })
@@ -1529,7 +1531,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
         // 2. ✅ Auto-save with UPDATED layout (not stale `layout`)
         setTimeout(() => {
           saveLayout(updatedLayout).then((success) => {
-            console.log(success ? '✅ Auto-save successful' : '❌ Auto-save failed')
+            debugLog(success ? '✅ Auto-save successful' : '❌ Auto-save failed')
           })
         }, 100)
 
@@ -1554,10 +1556,10 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           // ✅ CRITICAL FIX: Auto-save after deletion
           setTimeout(async () => {
             try {
-              console.log('💾 Auto-saving after column deletion...')
+              debugLog('💾 Auto-saving after column deletion...')
               const success = await saveLayout(currentLayoutRef.current)
               if (success) {
-                console.log('✅ Layout auto-saved after column deletion')
+                debugLog('✅ Layout auto-saved after column deletion')
               }
             } catch (error) {
               console.error('❌ Error auto-saving after column deletion:', error)
@@ -1822,11 +1824,11 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
     return (
       <div className="cm-page-editor editor-shell flex items-center justify-center min-h-[60vh]">
         <div className="w-full max-w-5xl space-y-4 px-6">
-          <div className="h-12 animate-pulse rounded-2xl bg-slate-800/50" />
+          <div className="h-12 animate-pulse rounded-xl bg-white/[0.08]" />
           <div className="grid grid-cols-[220px_1fr_260px] gap-4">
-            <div className="h-[520px] animate-pulse rounded-3xl bg-slate-800/40" />
-            <div className="h-[520px] animate-pulse rounded-3xl bg-slate-800/30" />
-            <div className="h-[520px] animate-pulse rounded-3xl bg-slate-800/40" />
+            <div className="h-[520px] animate-pulse rounded-2xl bg-white/[0.06]" />
+            <div className="h-[520px] animate-pulse rounded-2xl bg-white/10" />
+            <div className="h-[520px] animate-pulse rounded-2xl bg-white/[0.06]" />
           </div>
         </div>
       </div>
@@ -1889,9 +1891,9 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           </div>
         ) : null}
         {/* Main Content Area */}
-        <div className="ed-body flex-1 overflow-hidden">
+        <div className="ed-body flex-1 min-h-0 overflow-hidden">
           {/* Left Sidebar */}
-          <div className={`left-col ${!isPreviewMode && leftSidebarVisible ? 'open' : 'closed'}`}>
+          <div className={`left-col min-h-0 ${!isPreviewMode && leftSidebarVisible ? 'open' : 'closed'}`}>
             {!isPreviewMode && leftSidebarVisible && (
               <div className="left-inner">
                 <LeftSidebar
@@ -1919,7 +1921,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           )}
 
           {/* Canvas Area */}
-          <div className="canvas-col">
+          <div className="canvas-col min-h-0">
             <PageEditorCanvas
               layout={layout}
               setLayout={setLayout}
@@ -2004,7 +2006,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           )}
 
           {/* Right Sidebar - Properties Panel */}
-          <div className={`right-col ${!isPreviewMode && rightSidebarVisible ? 'open' : 'closed'} m-0 flex overflow-hidden transition-all duration-300 ease-in-out`}>
+          <div className={`right-col min-h-0 ${!isPreviewMode && rightSidebarVisible ? 'open' : 'closed'} m-0 flex overflow-hidden transition-all duration-300 ease-in-out`}>
             {!isPreviewMode && rightSidebarVisible && (
               <div className="flex-1 overflow-auto">
                 <PropertyPanel

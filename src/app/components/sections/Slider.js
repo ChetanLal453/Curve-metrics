@@ -1,3 +1,5 @@
+'use client';
+
 // components/sections/Slider.js
 import { useState } from 'react';
 

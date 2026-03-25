@@ -310,7 +310,7 @@ const ColumnActions: React.FC<{
         e.stopPropagation()
         onEdit()
       }}
-      className="bg-gray-100 hover:bg-gray-200 text-black rounded p-2"
+      className="column-action-btn"
       title="Edit Column">
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -326,7 +326,7 @@ const ColumnActions: React.FC<{
         e.stopPropagation()
         onDelete()
       }}
-      className="bg-red-100 hover:bg-red-200 text-red-700 rounded p-2"
+      className="column-action-btn is-danger"
       title="Delete Column">
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -680,11 +680,25 @@ export const PageEditorCanvas: React.FC<PageEditorCanvasProps> = ({
 
   return (
     <>
-      <div className={`canvas-scroll flex-1 min-h-0 ${showGrid ? '' : 'grid-off'}`}>
+      <div
+        className={`canvas-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden ${showGrid ? '' : 'grid-off'}`}
+        style={{
+          background: '#0f1117',
+          minHeight: 0,
+          padding: '28px 24px 64px',
+        }}>
         <div
           id="page-frame"
-          className={`page-frame flex h-full flex-col ${isWide ? 'wide' : ''} ${deviceMode === 'mobile' ? 'mobile-view' : ''} ${deviceMode === 'tablet' ? 'tablet-view' : ''} ${showGrid ? '' : 'grid-off'}`}
-          style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}>
+          className={`page-frame ${isWide ? 'wide' : ''} ${deviceMode === 'mobile' ? 'mobile-view' : ''} ${deviceMode === 'tablet' ? 'tablet-view' : ''} ${showGrid ? '' : 'grid-off'}`}
+          style={{
+            background: '#ffffff',
+            borderRadius: '0',
+            boxShadow: '0 18px 45px rgba(15, 17, 23, 0.08)',
+            border: '1px solid rgba(15, 23, 42, 0.08)',
+            width: '100%',
+            maxWidth: '1100px',
+            margin: '0 auto',
+          }}>
           <PageSectionsDroppable layout={layout} renderSection={renderSection} />
         </div>
         <CanvasActions onAddSection={onAddSection} />
