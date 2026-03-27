@@ -958,7 +958,7 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
     marginTop: captionPosition === 'bottom' ? '8px' : 0,
     marginBottom: captionPosition === 'top' ? '8px' : 0,
     fontSize: '14px',
-    color: '#666',
+    color: 'var(--canvas-muted, #718096)',
     textAlign: captionAlignment,
     width: '100%',
     padding: '4px 0',
@@ -988,7 +988,7 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
     width: '100%',
     height: height === 'auto' ? (shape === 'circle' || shape === 'square' ? '100%' : '200px') : height,
     aspectRatio: shapeStyle.aspectRatio,
-    border: '2px dashed #cbd5e0',
+    border: '2px dashed var(--canvas-border2, #cbd5e0)',
     borderRadius: shapeStyle.borderRadius,
     clipPath: shapeStyle.clipPath,
     display: 'flex',
@@ -996,8 +996,8 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    backgroundColor: dragOver ? '#ebf8ff' : '#f7fafc',
-    color: '#718096',
+    backgroundColor: dragOver ? 'var(--canvas-accentbg, #ebf8ff)' : 'var(--canvas-surface, #f7fafc)',
+    color: 'var(--canvas-muted, #718096)',
     fontSize: '16px',
     fontWeight: '500',
     transition: 'all 0.2s ease-in-out',
@@ -1009,15 +1009,15 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
     width: '100%',
     height: height === 'auto' ? (shape === 'circle' || shape === 'square' ? '100%' : '200px') : height,
     aspectRatio: shapeStyle.aspectRatio,
-    border: '2px dashed #f56565',
+    border: '2px dashed rgba(248, 113, 113, 0.6)',
     borderRadius: shapeStyle.borderRadius,
     clipPath: shapeStyle.clipPath,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fed7d7',
-    color: '#c53030',
+    backgroundColor: 'rgba(248, 113, 113, 0.12)',
+    color: '#f87171',
     fontSize: '14px',
     gap: '8px',
   }
@@ -1025,7 +1025,7 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
   const skeletonStyle: React.CSSProperties = {
     width: '100%',
     height: '100%',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: 'var(--canvas-surface3, #e2e8f0)',
     borderRadius: shapeStyle.borderRadius,
     clipPath: shapeStyle.clipPath,
     animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -1037,13 +1037,13 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
     left: '0',
     right: '0',
     height: '4px',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: 'var(--canvas-border, #e2e8f0)',
     borderRadius: '2px',
   }
 
   const progressFillStyle: React.CSSProperties = {
     height: '100%',
-    backgroundColor: '#4299e1',
+    backgroundColor: 'var(--canvas-accent, #4299e1)',
     width: `${uploadProgress}%`,
     transition: 'width 0.3s ease',
     borderRadius: '2px',
@@ -1061,12 +1061,12 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
-          <FaIcons.FaCloudUploadAlt size={32} color="#718096" />
+          <FaIcons.FaCloudUploadAlt size={32} color="var(--canvas-muted, #718096)" />
           <div>Upload Image to Backend</div>
-          <div style={{ fontSize: '12px', color: '#a0aec0' }}>
+          <div style={{ fontSize: '12px', color: 'var(--canvas-muted, #a0aec0)' }}>
             Drag & drop or click to upload
           </div>
-          <div style={{ fontSize: '10px', color: '#a0aec0' }}>
+          <div style={{ fontSize: '10px', color: 'var(--canvas-muted, #a0aec0)' }}>
             Images will be saved to backend server
           </div>
         </div>

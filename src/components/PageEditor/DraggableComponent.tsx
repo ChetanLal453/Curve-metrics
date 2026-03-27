@@ -48,6 +48,9 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
 }) => {
   const { isDragging } = useDragDrop()
   const [isDeleted, setIsDeleted] = useState(false) // 🆕 NEW STATE
+  const isAdvancedHeading = component.type === 'advancedheading'
+  const isAdvancedParagraph = component.type === 'advancedparagraph'
+  const isAdvancedContent = isAdvancedHeading || isAdvancedParagraph
 
   const draggableId = `component:${component.id}:${sectionId}-${containerId}-${rowId}-${colId}`
 
@@ -125,7 +128,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       style={style}
       {...attributes}
       data-selected={isSelected}
-      className={`draggable-component group relative mb-3 w-full max-w-full ${isSortableDragging ? 'opacity-50' : ''} ${isSelected ? 'is-selected' : ''}`}
+      className={`draggable-component group relative mb-3 w-full max-w-full ${isSortableDragging ? 'opacity-50' : ''} ${isSelected ? 'is-selected' : ''} dc-type-${component.type}`}
       onClick={handleSelectClick}
     >
       {/* Drag Handle */}
@@ -141,28 +144,34 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = ({
       </div>
 
       {/* Component Content */}
-      <div className="h-auto w-full p-4">
-        <ResizableBox
-          width={'100%' as any}
-          height={component.height || 200}
-          axis="y"
-          onResize={(event: React.SyntheticEvent, { size }: { size: { width: number; height: number } }) => {
-            onResize?.(component.id, size)
-          }}
-          minConstraints={[100, 100]}
-          maxConstraints={[Infinity, 800]}
-          className="w-full"
-          style={{ maxWidth: '100%' }}
-        >
+      <div className={`dc-body h-auto w-full ${isAdvancedContent ? 'p-0' : 'p-4'}`}>
+        {isAdvancedContent ? (
           <div className="h-auto w-full">
             {renderComponent(component, { sectionId, containerId, rowId, colId })}
           </div>
+        ) : (
+          <ResizableBox
+            width={'100%' as any}
+            height={component.height || 200}
+            axis="y"
+            onResize={(event: React.SyntheticEvent, { size }: { size: { width: number; height: number } }) => {
+              onResize?.(component.id, size)
+            }}
+            minConstraints={[100, 100]}
+            maxConstraints={[Infinity, 800]}
+            className="dc-resizable w-full"
+            style={{ maxWidth: '100%' }}
+          >
+            <div className="h-auto w-full">
+              {renderComponent(component, { sectionId, containerId, rowId, colId })}
+            </div>
 
-          {/* Component Label */}
-          <div className="dc-label">
-            {component.label} ({component.type})
-          </div>
-        </ResizableBox>
+            {/* Component Label */}
+            <div className="dc-label">
+              {component.label} ({component.type})
+            </div>
+          </ResizableBox>
+        )}
       </div>
 
       {/* Action Buttons Top-Right */}

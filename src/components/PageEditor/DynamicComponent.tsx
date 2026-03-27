@@ -1535,6 +1535,16 @@ const DynamicComponentInner = memo(
             setLocalText(propsToUse?.text || 'Advanced Heading')
           }, [propsToUse?.text])
 
+          const resolvedTag = useMemo(() => {
+            const htmlTag = propsToUse?.htmlTag
+            if (!htmlTag || htmlTag === 'auto') {
+              return propsToUse?.semanticLevel || propsToUse?.level || 'h2'
+            }
+            return htmlTag
+          }, [propsToUse?.htmlTag, propsToUse?.semanticLevel, propsToUse?.level])
+
+          const tagLabel = String(resolvedTag || 'h2').toUpperCase()
+
           const handleTextUpdate = (newText: string) => {
             setLocalText(newText)
             handleUpdate({ ...propsToUse, text: newText })
@@ -1625,33 +1635,35 @@ const DynamicComponentInner = memo(
           )
 
           const headingStyle = {
-            backgroundColor: isSelected ? '#f0f9ff' : 'transparent',
-            border: isSelected ? '2px solid #3b82f6' : '1px dashed #d1d5db',
-            borderRadius: '6px',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
           }
 
           return (
-            <div className={`relative ${isSelected ? 'ring-2 ring-blue-400' : ''}`} onClick={handleClick} style={headingStyle}>
+            <div
+              className={`component-edit-shell advanced-heading-shell relative ${isSelected ? 'is-selected' : ''}`}
+              onClick={handleClick}
+              style={headingStyle}
+            >
               {!isEditing && (
                 <div
                   onDoubleClick={(e) => {
                     e.stopPropagation()
                     setIsEditing(true)
                   }}
-                  className="cursor-pointer p-4">
+                  className="component-edit-body cursor-pointer p-0">
                   <AdvancedHeading {...propsToUse} text={localText} componentId={component.id} onSeoWarning={handleSeoWarning} />
 
                   {isSelected && (
-                    <div className="absolute -top-3 -right-3 bg-blue-500 text-white text-xs px-3 py-1 rounded-full shadow-lg flex items-center gap-2">
-                      <span>✏️</span>
+                    <div className="component-edit-pill absolute -top-3 -right-3 bg-blue-500 text-white text-xs px-3 py-1 rounded-full shadow-lg flex items-center gap-2">
+                      <span className="font-semibold">{tagLabel}</span>
+                      <span>-</span>
                       <span>Rich Text</span>
                     </div>
                   )}
 
-                  <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-5 transition-all rounded flex items-center justify-center opacity-0 hover:opacity-100 pointer-events-none">
-                    <div className="bg-white px-4 py-2 rounded shadow text-sm text-gray-600 border">Double-click to edit rich text</div>
+                  <div className="component-edit-hint absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-5 transition-all rounded flex items-center justify-center opacity-0 hover:opacity-100 pointer-events-none">
+                    <div className="component-edit-hint-box bg-white px-4 py-2 rounded shadow text-sm text-gray-600 border">Double-click to edit rich text</div>
                   </div>
                 </div>
               )}
@@ -1675,23 +1687,27 @@ const DynamicComponentInner = memo(
           }
 
           const paragraphStyle = {
-            backgroundColor: isSelected ? '#f0f9ff' : 'transparent',
-            border: isSelected ? '2px solid #3b82f6' : '1px dashed #d1d5db',
-            borderRadius: '6px',
+            backgroundColor: 'transparent',
+            border: 'none',
+            borderRadius: '0px',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
-            padding: '8px',
+            padding: '0px',
           }
 
           return (
-            <div className={`relative ${isSelected ? 'ring-2 ring-blue-400' : ''}`} onClick={handleClick} style={paragraphStyle}>
+            <div
+              className={`component-edit-shell advanced-paragraph-shell relative ${isSelected ? 'is-selected' : ''}`}
+              onClick={handleClick}
+              style={paragraphStyle}
+            >
               {!isEditing && (
                 <div
                   onDoubleClick={(e) => {
                     e.stopPropagation()
                     setIsEditing(true)
                   }}
-                  className="cursor-pointer">
+                  className="component-edit-body cursor-pointer p-0">
                   <AdvancedParagraph
                     {...propsToUse}
                     text={localText}
@@ -1701,14 +1717,14 @@ const DynamicComponentInner = memo(
                   />
 
                   {isSelected && (
-                    <div className="absolute -top-3 -right-3 bg-blue-500 text-white text-xs px-3 py-1 rounded-full shadow-lg flex items-center gap-2">
+                    <div className="component-edit-pill absolute -top-3 -right-3 bg-blue-500 text-white text-xs px-3 py-1 rounded-full shadow-lg flex items-center gap-2">
                       <span>✏️</span>
                       <span>Rich Text</span>
                     </div>
                   )}
 
-                  <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-5 transition-all rounded flex items-center justify-center opacity-0 hover:opacity-100 pointer-events-none">
-                    <div className="bg-white px-4 py-2 rounded shadow text-sm text-gray-600 border">Double-click to edit rich text</div>
+                  <div className="component-edit-hint absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-5 transition-all rounded flex items-center justify-center opacity-0 hover:opacity-100 pointer-events-none">
+                    <div className="component-edit-hint-box bg-white px-4 py-2 rounded shadow text-sm text-gray-600 border">Double-click to edit rich text</div>
                   </div>
                 </div>
               )}
@@ -1932,8 +1948,9 @@ const DynamicComponentInner = memo(
     return (
       <div
         ref={ref}
-        className={`relative w-full max-w-full h-auto overflow-x-hidden border-2 rounded transition-all duration-200 ${
-          isSelected ? 'border-blue-400 bg-blue-50 shadow-lg' : 'border-transparent hover:border-gray-300'
+        data-selected={isSelected}
+        className={`component-shell relative w-full max-w-full h-auto overflow-x-hidden transition-all duration-200 ${
+          isSelected ? 'is-selected' : ''
         }`}
         onClick={handleClick}
         {...draggableProps}
@@ -1941,7 +1958,7 @@ const DynamicComponentInner = memo(
         {renderComponent()}
 
         {isSelected && (
-          <div className="absolute -top-3 -left-3 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center shadow">
+          <div className="component-selected-badge absolute -top-3 -left-3 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center shadow">
             <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"

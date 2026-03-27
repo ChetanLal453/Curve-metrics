@@ -189,8 +189,33 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
   const headingProp = ['headingText', 'title', 'text', 'content', 'label'].find((key) => key in localProps) || 'text'
   const levelValue = localProps.level || localProps.semanticLevel || 'h1'
-  const fontFamily = localProps.fontFamily || 'Inter'
-  const fontSize = Number(localProps.fontSize || localProps.size || 50)
+  const isAdvancedHeading = resolvedComponent?.type === 'advancedheading'
+
+  const getDefaultHeadingSize = (level: string) => {
+    const sizeMap: Record<string, number> = {
+      h1: 36,
+      h2: 24,
+      h3: 17,
+      h4: 15,
+      h5: 14,
+      h6: 12,
+    }
+    return sizeMap[level] || 24
+  }
+
+  const parseFontSize = (value: any) => {
+    if (value === undefined || value === null) return undefined
+    if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+    const str = String(value).trim()
+    if (!str) return undefined
+    if (/^-?\d+(\.\d+)?$/.test(str)) return Number(str)
+    if (/^-?\d+(\.\d+)?px$/i.test(str)) return parseFloat(str)
+    return undefined
+  }
+
+  const explicitFontSize = parseFontSize(localProps.fontSize ?? localProps.size)
+  const fontSize = explicitFontSize ?? (isAdvancedHeading ? getDefaultHeadingSize(levelValue) : 50)
+  const fontFamily = localProps.fontFamily || (isAdvancedHeading ? "'DM Sans', system-ui, sans-serif" : 'Inter')
   const fontWeight = String(localProps.fontWeight || localProps.weight || 600)
   const textAlign = String(localProps.textAlign || localProps.align || 'left')
   const colorValue = String(localProps.color || '#eeeeff')
@@ -421,6 +446,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
             <div className="frow">
               <label className="flbl">Font Family</label>
               <select className="fi" value={fontFamily} onChange={(event) => handlePropChange('fontFamily', event.target.value)}>
+                <option value="'DM Sans', system-ui, sans-serif">DM Sans</option>
                 <option value="Times New Roman">Times New Roman</option>
                 <option value="Inter">Inter</option>
                 <option value="Playfair Display">Playfair Display</option>

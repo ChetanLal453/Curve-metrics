@@ -97,11 +97,11 @@ export const advancedButtonDefaultProps: AdvancedButtonProps = {
   variant: 'primary',
   size: 'medium',
   // Color System
-  primaryColor: '#3B82F6',
+  primaryColor: '#7C6DFA',
   textColor: '#FFFFFF',
-  hoverColor: '#2563EB',
-  activeColor: '#1D4ED8',
-  borderColor: '#3B82F6',
+  hoverColor: '#A594FF',
+  activeColor: '#6A5AE5',
+  borderColor: '#7C6DFA',
   // ✅ NEW: Gradient Properties
   useGradient: false,
   gradientColors: '#7f00ff, #e100ff',
@@ -125,7 +125,7 @@ export const advancedButtonDefaultProps: AdvancedButtonProps = {
   paddingLeft: '28px',
 
   // ===== TYPOGRAPHY =====
-  fontFamily: 'system-ui, sans-serif',
+  fontFamily: "'DM Sans', system-ui, sans-serif",
   fontSize: '16px',
   fontWeight: '600',
   letterSpacing: '0px',

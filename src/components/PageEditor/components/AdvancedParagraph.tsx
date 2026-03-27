@@ -100,9 +100,9 @@ const AdvancedParagraph: React.FC<AdvancedParagraphProps> = ({
   fontStyle = 'normal',
   
   // Colors
-  textColor = '#333333',
+  textColor = 'var(--canvas-muted, #333333)',
   backgroundColor = 'transparent',
-  hoverColor,
+  hoverColor = 'var(--canvas-accent2, #0056b3)',
   
   // Spacing
   margin = '0 0 16px 0',
@@ -165,11 +165,80 @@ const AdvancedParagraph: React.FC<AdvancedParagraphProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [localText, setLocalText] = useState(text);
   const [isHovered, setIsHovered] = useState(false);
+  const [isEditor, setIsEditor] = useState(false);
+  const legacyDefaultText = 'This is a comprehensive paragraph component with rich text support, advanced styling, and smooth animations.';
+  const previewText =
+    '<p>Lead paragraph text. Slightly larger and higher contrast for introductions.</p>' +
+    '<p>Body copy sits here — comfortable line height (1.75) and muted color keeps long reads easy. Configure font size, weight, and line height from the right panel.</p>' +
+    '<p>Caption or small text variant. Used for footnotes, disclaimers, and supplemental info.</p>';
+  const migrationRef = React.useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsEditor(Boolean(document.querySelector('.cm-page-editor')));
+  }, []);
+
+  const isDarkColorValue = (value?: string) => {
+    if (!value) return false;
+    const normalized = value.trim().toLowerCase();
+    if (normalized.startsWith('var(') || normalized === 'transparent') return false;
+    if (normalized === 'black') return true;
+
+    const hexMatch = normalized.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1].length === 3
+        ? hexMatch[1].split('').map((c) => c + c).join('')
+        : hexMatch[1];
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      return luminance < 0.35;
+    }
+
+    const rgbMatch = normalized.match(/^rgb\\s*\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)$/);
+    if (rgbMatch) {
+      const r = Number(rgbMatch[1]);
+      const g = Number(rgbMatch[2]);
+      const b = Number(rgbMatch[3]);
+      const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      return luminance < 0.35;
+    }
+
+    return false;
+  };
+
+  const resolvedTextColor = React.useMemo(() => {
+    if (!isEditor) return textColor;
+    return isDarkColorValue(textColor) ? 'var(--canvas-muted, #8b90a8)' : textColor;
+  }, [textColor, isEditor]);
+
+  const resolvedHoverColor = React.useMemo(() => {
+    if (!isEditor) return hoverColor;
+    return isDarkColorValue(hoverColor) ? 'var(--canvas-accent2, #a594ff)' : hoverColor;
+  }, [hoverColor, isEditor]);
+
+  const resolvedHoverTextColor = React.useMemo(() => {
+    if (!isEditor) return hoverTextColor;
+    return isDarkColorValue(hoverTextColor) ? 'var(--canvas-accent2, #a594ff)' : hoverTextColor;
+  }, [hoverTextColor, isEditor]);
 
   // Sync with incoming props
   useEffect(() => {
     setLocalText(text);
   }, [text]);
+
+  useEffect(() => {
+    if (!isEditor || migrationRef.current) return;
+    const plainText = (text || '').replace(/<[^>]*>/g, '').trim();
+    if (plainText === legacyDefaultText) {
+      migrationRef.current = true;
+      setLocalText(previewText);
+      if (onUpdate) {
+        onUpdate({ ...props, text: previewText });
+      }
+    }
+  }, [isEditor, text, onUpdate, props]);
 
   const handleTextUpdate = useCallback((newText: string) => {
     const sanitizedText = sanitizeHtml(newText);
@@ -226,7 +295,7 @@ const AdvancedParagraph: React.FC<AdvancedParagraphProps> = ({
         return { textDecoration: 'underline' };
       case 'color-change':
         return { 
-          color: hoverTextColor || hoverColor || textColor,
+          color: resolvedHoverTextColor || resolvedHoverColor || resolvedTextColor,
           backgroundColor: hoverBackgroundColor || backgroundColor
         };
       case 'background-change':
@@ -284,7 +353,7 @@ const AdvancedParagraph: React.FC<AdvancedParagraphProps> = ({
     fontStyle: fontStyle as React.CSSProperties['fontStyle'],
     
     // Colors
-    color: isHovered && hoverTextColor ? hoverTextColor : (isHovered && hoverColor ? hoverColor : textColor),
+    color: isHovered && resolvedHoverTextColor ? resolvedHoverTextColor : (isHovered && resolvedHoverColor ? resolvedHoverColor : resolvedTextColor),
     backgroundColor: isHovered && hoverBackgroundColor ? hoverBackgroundColor : backgroundColor,
     
     // Alignment & Layout
@@ -430,54 +499,173 @@ const AdvancedParagraph: React.FC<AdvancedParagraphProps> = ({
   const handleMouseEnter = () => setIsHovered(true);
   const handleMouseLeave = () => setIsHovered(false);
 
+  const hasBlockTag = /<\s*(p|div|ul|ol|li|h\d|blockquote|pre)\b/i.test(localText || '');
+  const contentTagName = isEditor ? 'div' : (hasBlockTag ? 'div' : 'p');
+  const displayText = React.useMemo(() => {
+    if (!isEditor) return localText;
+    const plainText = (localText || '').replace(/<[^>]*>/g, '').trim();
+    if (plainText === legacyDefaultText) return previewText;
+    if (!/<\s*p\b/i.test(localText || '')) {
+      return `<p>${localText || ''}</p>`;
+    }
+    return localText;
+  }, [isEditor, localText, legacyDefaultText, previewText]);
+
+  const paragraphDisplay = (
+    <div 
+      onDoubleClick={handleDoubleClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="ap-display cursor-pointer"
+    >
+      <SafeHtml
+        html={displayText}
+        tagName={contentTagName as any}
+        id={customId || undefined}
+        className={className}
+        style={paragraphStyle}
+        aria-label={ariaLabel}
+        role={role}
+        tabIndex={tabIndex}
+      />
+      
+      {/* Hover Edit Hint */}
+      {editable && (
+        <div className="ap-edit-hint absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-5 transition-all rounded flex items-center justify-center opacity-0 hover:opacity-100 pointer-events-none">
+          <div className="ap-edit-hint-box bg-white px-4 py-2 rounded shadow text-sm text-gray-600 border">
+            {enableRichText ? 'Double-click to edit rich text' : 'Paragraph'}
+          </div>
+        </div>
+      )}
+
+      {/* Selection Indicator */}
+      {!selectable && (
+        <div className="ap-nonselectable absolute top-2 right-2 bg-yellow-500 text-white text-xs px-2 py-1 rounded">
+          Non-selectable
+        </div>
+      )}
+
+      {/* Truncation Indicator */}
+      {truncate && (
+        <div className="ap-truncate-badge absolute bottom-2 right-2 bg-gray-500 text-white text-xs px-2 py-1 rounded">
+          {maxLines ? `${maxLines} lines` : 'Truncated'}
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="relative">
+    <div className="advanced-paragraph relative">
       {/* Display Mode */}
       {!isEditing && (
-        <div 
-          onDoubleClick={handleDoubleClick}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          className="cursor-pointer"
-        >
-          <SafeHtml
-            html={localText}
-            tagName="p"
-            id={customId || undefined}
-            className={className}
-            style={paragraphStyle}
-            aria-label={ariaLabel}
-            role={role}
-            tabIndex={tabIndex}
-          />
-          
-          {/* Hover Edit Hint */}
-          {editable && (
-            <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-5 transition-all rounded flex items-center justify-center opacity-0 hover:opacity-100 pointer-events-none">
-              <div className="bg-white px-4 py-2 rounded shadow text-sm text-gray-600 border">
-                {enableRichText ? 'Double-click to edit rich text' : 'Paragraph'}
-              </div>
+        isEditor ? (
+          <div className="advanced-paragraph-card">
+            <div className="advanced-paragraph-header" aria-hidden="true">
+              <span className="advanced-paragraph-tag">Content</span>
+              <span className="advanced-paragraph-title">Paragraph</span>
+              <span className="advanced-paragraph-subtitle">body text block</span>
             </div>
-          )}
-
-          {/* Selection Indicator */}
-          {!selectable && (
-            <div className="absolute top-2 right-2 bg-yellow-500 text-white text-xs px-2 py-1 rounded">
-              Non-selectable
+            <div className="advanced-paragraph-body">
+              {paragraphDisplay}
             </div>
-          )}
-
-          {/* Truncation Indicator */}
-          {truncate && (
-            <div className="absolute bottom-2 right-2 bg-gray-500 text-white text-xs px-2 py-1 rounded">
-              {maxLines ? `${maxLines} lines` : 'Truncated'}
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          paragraphDisplay
+        )
       )}
       
       {/* Edit Mode Overlay */}
       {isEditing && enableRichText && <RichTextEditor />}
+
+      <style jsx>{`
+        .advanced-paragraph-card {
+          width: 100%;
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        .advanced-paragraph-header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 12px 16px;
+          width: 100%;
+          background: var(--canvas-surface2, #1a1d28);
+          border-bottom: 1px solid var(--canvas-border, rgba(255, 255, 255, 0.07));
+          font-family: 'DM Sans', system-ui, sans-serif;
+        }
+
+        .advanced-paragraph-tag {
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--canvas-accent2, #a594ff);
+          background: var(--canvas-accentbg, rgba(124, 109, 250, 0.12));
+          border: 1px solid rgba(124, 109, 250, 0.2);
+          padding: 2px 8px;
+          border-radius: 20px;
+        }
+
+        .advanced-paragraph-title {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--canvas-text, #e8eaf0);
+        }
+
+        .advanced-paragraph-subtitle {
+          font-size: 11.5px;
+          color: var(--canvas-text3, #5a5f7a);
+          margin-left: auto;
+          font-family: 'DM Mono', monospace;
+        }
+
+        .advanced-paragraph-body {
+          padding: 28px 36px;
+          min-height: 120px;
+          display: flex;
+          align-items: flex-start;
+          justify-content: flex-start;
+          flex-direction: column;
+          gap: 12px;
+          background-image: radial-gradient(circle, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+          background-size: 20px 20px;
+        }
+
+        .ap-display {
+          position: relative;
+          width: 100%;
+          max-width: 100%;
+        }
+
+        .advanced-paragraph-body :global(p) {
+          margin: 0;
+        }
+
+        .advanced-paragraph-body :global(p + p) {
+          margin-top: 12px;
+        }
+
+        .advanced-paragraph-body :global(p:nth-child(1)) {
+          font-size: 16px;
+          color: var(--canvas-text, #e8eaf0);
+          line-height: 1.65;
+          font-weight: 400;
+        }
+
+        .advanced-paragraph-body :global(p:nth-child(2)) {
+          font-size: 14px;
+          color: var(--canvas-muted, #8b90a8);
+          line-height: 1.75;
+        }
+
+        .advanced-paragraph-body :global(p:nth-child(3)) {
+          font-size: 12.5px;
+          color: var(--canvas-text3, #5a5f7a);
+          line-height: 1.7;
+          font-style: italic;
+        }
+      `}</style>
     </div>
   );
 };
@@ -488,7 +676,10 @@ const AdvancedParagraph: React.FC<AdvancedParagraphProps> = ({
 
 export const advancedParagraphDefaultProps: Partial<AdvancedParagraphProps> = {
   // Core Content
-  text: 'This is a comprehensive paragraph component with rich text support, advanced styling, and smooth animations.',
+  text:
+    '<p>Lead paragraph text. Slightly larger and higher contrast for introductions.</p>' +
+    '<p>Body copy sits here — comfortable line height (1.75) and muted color keeps long reads easy. Configure font size, weight, and line height from the right panel.</p>' +
+    '<p>Caption or small text variant. Used for footnotes, disclaimers, and supplemental info.</p>',
   textAlign: 'left',
 
   // Typography
@@ -502,9 +693,9 @@ export const advancedParagraphDefaultProps: Partial<AdvancedParagraphProps> = {
   fontStyle: 'normal',
 
   // Colors
-  textColor: '#333333',
+  textColor: 'var(--canvas-muted, #333333)',
   backgroundColor: 'transparent',
-  hoverColor: '#0056b3',
+  hoverColor: 'var(--canvas-accent2, #0056b3)',
 
   // Spacing
   margin: '0 0 16px 0',
@@ -541,8 +732,8 @@ export const advancedParagraphDefaultProps: Partial<AdvancedParagraphProps> = {
 
   // Interactive
   hoverEffect: 'none',
-  hoverBackgroundColor: '#f5f5f5',
-  hoverTextColor: '#000000',
+  hoverBackgroundColor: 'var(--canvas-surface, #f5f5f5)',
+  hoverTextColor: 'var(--canvas-accent2, #000000)',
   transition: 'all 0.2s ease',
 
   // Advanced Features
@@ -669,7 +860,7 @@ export const advancedParagraphSchema = {
     textColor: {
       type: 'color',
       label: 'Text Color',
-      default: '#333333',
+      default: '#8B90A8',
       category: 'Colors',
     },
     backgroundColor: {
@@ -681,7 +872,7 @@ export const advancedParagraphSchema = {
     hoverColor: {
       type: 'color',
       label: 'Hover Color',
-      default: '#0056b3',
+      default: '#A594FF',
       category: 'Colors',
     },
 
@@ -880,13 +1071,13 @@ export const advancedParagraphSchema = {
     hoverBackgroundColor: {
       type: 'color',
       label: 'Hover Background Color',
-      default: '#f5f5f5',
+      default: '#1A1D28',
       category: 'Interactive',
     },
     hoverTextColor: {
       type: 'color',
       label: 'Hover Text Color',
-      default: '#000000',
+      default: '#A594FF',
       category: 'Interactive',
     },
     transition: {

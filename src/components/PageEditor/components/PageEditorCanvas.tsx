@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useMemo, useRef, useEffect } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { DroppableSection } from '../DroppableSection'
@@ -359,8 +359,14 @@ const PageSectionsDroppable: React.FC<{
       ref={setNodeRef}
       className="page-sections">
       <SortableContext items={sectionItems} strategy={verticalListSortingStrategy}>
-        {sections.map((section, index) => renderSection(section, index))}
+        {sections.map((section, index) => (
+          <React.Fragment key={section?.id || `section-${index}`}>
+            {renderSection(section, index)}
+          </React.Fragment>
+        ))}
       </SortableContext>
+      {/* {sections.length === 0 && (
+      )} */}
     </div>
   )
 }
@@ -563,8 +569,13 @@ export const PageEditorCanvas: React.FC<PageEditorCanvasProps> = ({
 }) => {
   // FIXED: Handle undefined sections
   const sections = layout?.sections || []
+  const canvasScrollRef = useRef<HTMLDivElement>(null)
 
   const { isDraggingOverNested } = useDragDrop()
+
+  useEffect(() => {
+    canvasScrollRef.current?.scrollTo({ top: 0, left: 0 })
+  }, [])
 
   const renderComponent = useCallback(
     (component: LayoutComponent, context: any) => (
@@ -681,24 +692,11 @@ export const PageEditorCanvas: React.FC<PageEditorCanvasProps> = ({
   return (
     <>
       <div
-        className={`canvas-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden ${showGrid ? '' : 'grid-off'}`}
-        style={{
-          background: '#0f1117',
-          minHeight: 0,
-          padding: '28px 24px 64px',
-        }}>
+        ref={canvasScrollRef}
+        className={`canvas-scroll flex-1 min-h-0 ${showGrid ? '' : 'grid-off'}`}>
         <div
           id="page-frame"
-          className={`page-frame ${isWide ? 'wide' : ''} ${deviceMode === 'mobile' ? 'mobile-view' : ''} ${deviceMode === 'tablet' ? 'tablet-view' : ''} ${showGrid ? '' : 'grid-off'}`}
-          style={{
-            background: '#ffffff',
-            borderRadius: '0',
-            boxShadow: '0 18px 45px rgba(15, 17, 23, 0.08)',
-            border: '1px solid rgba(15, 23, 42, 0.08)',
-            width: '100%',
-            maxWidth: '1100px',
-            margin: '0 auto',
-          }}>
+          className={`page-frame canvas-frame ${isWide ? 'wide' : ''} ${deviceMode === 'mobile' ? 'mobile-view' : ''} ${deviceMode === 'tablet' ? 'tablet-view' : ''} ${showGrid ? '' : 'grid-off'}`}>
           <PageSectionsDroppable layout={layout} renderSection={renderSection} />
         </div>
         <CanvasActions onAddSection={onAddSection} />
@@ -762,3 +760,4 @@ const ActionButton: React.FC<{
     {label}
   </button>
 )
+
