@@ -3,52 +3,39 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { LayoutComponent } from '@/types/page-editor'
-import { Trash2, Plus, Pause, Play, Settings, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { componentRegistry } from '@/lib/componentRegistry'
 
-// ✅ SWIPER 12: CORRECT IMPORTS
 import { Swiper, SwiperSlide } from 'swiper/react'
 import type { Swiper as SwiperType } from 'swiper'
-
-// Import Swiper modules for Swiper 12
 import {
   Navigation,
   Pagination,
   Autoplay,
   Mousewheel,
   Scrollbar,
+  FreeMode,
+  Keyboard,
+  Controller,
   EffectFade,
   EffectCube,
   EffectCoverflow,
   EffectFlip,
-  EffectCreative,
   EffectCards,
-  FreeMode,
-  Thumbs,
-  Parallax,
-  Keyboard,
-  Controller
 } from 'swiper/modules'
 
-// Import Swiper styles
 import 'swiper/css'
 import 'swiper/css/navigation'
 import 'swiper/css/pagination'
 import 'swiper/css/scrollbar'
+import 'swiper/css/free-mode'
 import 'swiper/css/effect-fade'
 import 'swiper/css/effect-cube'
 import 'swiper/css/effect-coverflow'
 import 'swiper/css/effect-flip'
-import 'swiper/css/effect-creative'
 import 'swiper/css/effect-cards'
-import 'swiper/css/free-mode'
-import 'swiper/css/thumbs'
-import 'swiper/css/parallax'
-import 'swiper/css/mousewheel'
 
-// ✅ FIXED: Define a union type for all possible effects
-type SwiperEffect = 'slide' | 'fade' | 'cube' | 'coverflow' | 'flip' | 'cards' | 'creative'
-type HoverEffectType = 'lift' | 'scale' | 'glow' | 'tilt' | 'minimal' | 'none'
-type HoverIntensity = 'light' | 'medium' | 'strong'
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SwiperContainerProps {
   id?: string
@@ -62,59 +49,65 @@ interface SwiperContainerProps {
   containerId?: string
   rowId?: string
   colId?: string
-  carouselId?: string
-  slideIndex?: number
-  setSelectedComponent?: (component: { sectionId: string; compId: string; component: LayoutComponent }) => void
-  parentComponentId?: string
-  parentGridId?: string
   isEditing?: boolean
-  hoverEffects?: boolean
-  hoverEffectType?: HoverEffectType
-  hoverIntensity?: HoverIntensity
   [key: string]: any
 }
 
 interface SlideType {
   id: string
   components: LayoutComponent[]
-  backgroundColor: string
+  bgType?: 'color' | 'image' | 'gradient'
+  bgColor?: string
+  bgImage?: string
+  bgGradient?: string
+  bgOverlay?: boolean
+  bgOverlayColor?: string
+  bgOverlayOpacity?: number
   padding?: string
+  minHeight?: string
+  title?: string
+  subtitle?: string
+  backgroundColor?: string // legacy
 }
 
-// ✅ FIXED: Use the SwiperEffect type
+// ─── Defaults ─────────────────────────────────────────────────────────────────
+
+const PREVIEW_GRADIENTS = [
+  'linear-gradient(135deg, #1a1628, #22263a)',
+  'linear-gradient(135deg, #0f1a14, #1a2820)',
+  'linear-gradient(135deg, #1a1210, #2a1c1a)',
+] as const
+
+const PREVIEW_LABELS = [
+  'Hero slide content',
+  'Testimonial card',
+  'Product feature',
+  'Case study highlight',
+] as const
+
+const getPreviewGradient = (slideIndex: number) =>
+  PREVIEW_GRADIENTS[slideIndex % PREVIEW_GRADIENTS.length]
+
+const getPreviewLabel = (slideIndex: number) =>
+  PREVIEW_LABELS[slideIndex % PREVIEW_LABELS.length]
+
+const createDefaultSlide = (id: string, slideIndex = 0): SlideType => ({
+  id,
+  components: [],
+  bgType: 'gradient',
+  bgGradient: getPreviewGradient(slideIndex),
+  padding: '12px',
+  minHeight: '120px',
+  title: '',
+  subtitle: '',
+})
+
 export const swiperContainerDefaultProps = {
-  // Layout
   slidesPerView: 3,
   slidesPerGroup: 1,
-  spaceBetween: 20,
+  spaceBetween: 12,
   direction: 'horizontal' as const,
   centeredSlides: false,
-  slidesPerViewAuto: false,
-
-  // Effects - typed as SwiperEffect
-  effect: 'slide' as SwiperEffect,
-  effectFadeCrossFade: true,
-  effectCubeShadow: true,
-  effectCubeShadowScale: 0.94,
-  effectCoverflowDepth: 100,
-  effectCoverflowRotate: 30,
-  effectCoverflowStretch: 0,
-  effectFlipSlideShadows: true,
-  effectFlipLimitRotation: true,
-  effectCardsPerSlideOffset: 8,
-  effectCreativePrev: {
-    translate: ['-120%', 0, -500],
-  },
-  effectCreativeNext: {
-    translate: ['120%', 0, -500],
-  },
-
-  // Hover Effects
-  hoverEffects: true,
-  hoverEffectType: 'lift' as HoverEffectType,
-  hoverIntensity: 'medium' as HoverIntensity,
-
-  // Behavior
   autoplay: false,
   autoplayDelay: 3000,
   loop: true,
@@ -122,96 +115,62 @@ export const swiperContainerDefaultProps = {
   draggable: true,
   grabCursor: true,
   freeMode: false,
-  scrollContainer: false,
   mousewheel: false,
-  mousewheelForceToAxis: true,
-  mousewheelSensitivity: 1,
-
-  // Navigation
+  keyboard: true,
   navigation: true,
+  arrowStyle: 'rounded' as const,
+  arrowPosition: 'sides' as const,
   pagination: true,
   paginationType: 'bullets' as const,
   paginationDynamic: false,
-  paginationProgress: false,
+  paginationClickable: true,
+  effect: 'slide' as const,
+  effectFadeCrossFade: true,
+  effectCubeShadow: true,
+  effectCubeSlideShadows: true,
+  effectCoverflowRotate: 30,
+  effectCoverflowDepth: 100,
+  effectCoverflowStretch: 0,
+  effectCoverflowModifier: 1,
+  effectFlipSlideShadows: true,
+  effectCardsPerSlideOffset: 8,
+  effectCardsRotate: true,
+  hoverEffects: true,
+  hoverEffectType: 'none' as const,
+  hoverIntensity: 1.06,
   scrollbar: false,
   scrollbarDraggable: true,
-  scrollbarSnapOnRelease: true,
-
-  // Style
   backgroundColor: 'transparent',
-  padding: '20px',
-  borderRadius: '12px',
+  padding: '0px',
+  borderRadius: '0px',
   height: 'auto',
   width: '100%',
-  slideMinHeight: '400px',
-  slideWidth: '300px',
-  slideMaxWidth: 'none',
-
-  // Parallax
-  parallax: false,
-  parallaxBackground: '',
-  parallaxSensitivity: 0.5,
-
-  // Content
+  slideMinHeight: '120px',
   slides: [
-    {
-      id: 'slide-1',
-      components: [],
-      backgroundColor: '#ffffff',
-      padding: '20px',
-    },
-    {
-      id: 'slide-2',
-      components: [],
-      backgroundColor: '#f0f0f0',
-      padding: '20px',
-    },
-    {
-      id: 'slide-3',
-      components: [],
-      backgroundColor: '#e0e0e0',
-      padding: '20px',
-    },
-    {
-      id: 'slide-4',
-      components: [],
-      backgroundColor: '#d0d0d0',
-      padding: '20px',
-    },
-    {
-      id: 'slide-5',
-      components: [],
-      backgroundColor: '#c0c0c0',
-      padding: '20px',
-    },
-    {
-      id: 'slide-6',
-      components: [],
-      backgroundColor: '#b0b0b0',
-      padding: '20px',
-    },
+    createDefaultSlide('slide-1', 0),
+    createDefaultSlide('slide-2', 1),
+    createDefaultSlide('slide-3', 2),
+    createDefaultSlide('slide-4', 3),
+    createDefaultSlide('slide-5', 4),
   ],
 }
 
-// ✅ FIXED: Define complete schema with hover options
 export const swiperContainerSchema = {
   properties: {
-    // Layout Category
     direction: {
       type: 'select' as const,
       label: 'Direction',
-      default: swiperContainerDefaultProps.direction,
+      default: 'horizontal',
       options: [
         { value: 'horizontal', label: 'Horizontal' },
         { value: 'vertical', label: 'Vertical' },
       ],
       category: 'Layout',
     },
-
     slidesPerView: {
       type: 'select' as const,
       label: 'Slides Per View',
-      default: swiperContainerDefaultProps.slidesPerView,
+      default: 3,
       options: [
         { value: 1, label: '1' },
         { value: 2, label: '2' },
@@ -222,35 +181,166 @@ export const swiperContainerSchema = {
       ],
       category: 'Layout',
     },
-
-    slidesPerViewAuto: {
-      type: 'toggle' as const,
-      label: 'Auto Adjust Slides Per View',
-      default: swiperContainerDefaultProps.slidesPerViewAuto,
+    slidesPerGroup: {
+      type: 'select' as const,
+      label: 'Slides Per Group',
+      default: 1,
+      options: [
+        { value: 1, label: '1' },
+        { value: 2, label: '2' },
+        { value: 3, label: '3' },
+        { value: 4, label: '4' },
+      ],
       category: 'Layout',
     },
-
     spaceBetween: {
       type: 'number' as const,
       label: 'Space Between (px)',
-      default: swiperContainerDefaultProps.spaceBetween,
+      default: 12,
       min: 0,
-      max: 100,
+      max: 80,
       category: 'Layout',
     },
-
     centeredSlides: {
       type: 'toggle' as const,
       label: 'Centered Slides',
-      default: swiperContainerDefaultProps.centeredSlides,
+      default: false,
       category: 'Layout',
     },
-
-    // Effects Category
+    slideMinHeight: {
+      type: 'text' as const,
+      label: 'Slide Height',
+      default: '120px',
+      category: 'Layout',
+    },
+    autoplay: {
+      type: 'toggle' as const,
+      label: 'Auto Play',
+      default: false,
+      category: 'Behavior',
+    },
+    autoplayDelay: {
+      type: 'number' as const,
+      label: 'Auto Play Delay (ms)',
+      default: 3000,
+      min: 1000,
+      max: 10000,
+      step: 500,
+      category: 'Behavior',
+    },
+    loop: {
+      type: 'toggle' as const,
+      label: 'Infinite Loop',
+      default: true,
+      category: 'Behavior',
+    },
+    speed: {
+      type: 'number' as const,
+      label: 'Transition Speed (ms)',
+      default: 500,
+      min: 100,
+      max: 2000,
+      category: 'Behavior',
+    },
+    draggable: {
+      type: 'toggle' as const,
+      label: 'Draggable',
+      default: true,
+      category: 'Behavior',
+    },
+    grabCursor: {
+      type: 'toggle' as const,
+      label: 'Grab Cursor',
+      default: true,
+      category: 'Behavior',
+    },
+    freeMode: {
+      type: 'toggle' as const,
+      label: 'Free Mode',
+      default: false,
+      category: 'Behavior',
+    },
+    mousewheel: {
+      type: 'toggle' as const,
+      label: 'Mousewheel Control',
+      default: false,
+      category: 'Behavior',
+    },
+    keyboard: {
+      type: 'toggle' as const,
+      label: 'Keyboard Control',
+      default: true,
+      category: 'Behavior',
+    },
+    navigation: {
+      type: 'toggle' as const,
+      label: 'Navigation Arrows',
+      default: true,
+      category: 'Navigation',
+    },
+    arrowStyle: {
+      type: 'select' as const,
+      label: 'Arrow Style',
+      default: 'rounded',
+      options: [
+        { value: 'rounded', label: 'Rounded' },
+        { value: 'square', label: 'Square' },
+        { value: 'minimal', label: 'Minimal' },
+      ],
+      category: 'Navigation',
+    },
+    arrowPosition: {
+      type: 'select' as const,
+      label: 'Arrow Position',
+      default: 'sides',
+      options: [
+        { value: 'sides', label: 'Sides' },
+        { value: 'bottom', label: 'Bottom' },
+        { value: 'top-right', label: 'Top Right' },
+      ],
+      category: 'Navigation',
+    },
+    pagination: {
+      type: 'toggle' as const,
+      label: 'Pagination Dots',
+      default: true,
+      category: 'Navigation',
+    },
+    paginationType: {
+      type: 'select' as const,
+      label: 'Pagination Type',
+      default: 'bullets',
+      options: [
+        { value: 'bullets', label: 'Bullets' },
+        { value: 'fraction', label: 'Fraction' },
+        { value: 'progressbar', label: 'Progress Bar' },
+        { value: 'lines', label: 'Lines' },
+        { value: 'numbered', label: 'Numbered' },
+      ],
+      category: 'Navigation',
+    },
+    paginationDynamic: {
+      type: 'toggle' as const,
+      label: 'Dynamic Bullets',
+      default: false,
+      category: 'Navigation',
+    },
+    paginationClickable: {
+      type: 'toggle' as const,
+      label: 'Clickable Pagination',
+      default: true,
+      category: 'Navigation',
+    },
+    scrollbar: {
+      type: 'toggle' as const,
+      label: 'Scrollbar',
+      default: false,
+      category: 'Navigation',
+    },
     effect: {
       type: 'select' as const,
       label: 'Transition Effect',
-      default: swiperContainerDefaultProps.effect,
+      default: 'slide',
       options: [
         { value: 'slide', label: 'Slide' },
         { value: 'fade', label: 'Fade' },
@@ -258,373 +348,192 @@ export const swiperContainerSchema = {
         { value: 'coverflow', label: 'Coverflow' },
         { value: 'flip', label: 'Flip' },
         { value: 'cards', label: 'Cards' },
-        { value: 'creative', label: 'Creative' },
       ],
       category: 'Effects',
     },
-
-    // Hover Effects Category
+    effectFadeCrossFade: {
+      type: 'toggle' as const,
+      label: 'Fade Cross-Fade',
+      default: true,
+      category: 'Effects',
+    },
+    effectCubeShadow: {
+      type: 'toggle' as const,
+      label: 'Cube Shadow',
+      default: true,
+      category: 'Effects',
+    },
+    effectCubeSlideShadows: {
+      type: 'toggle' as const,
+      label: 'Cube Slide Shadows',
+      default: true,
+      category: 'Effects',
+    },
+    effectCoverflowRotate: {
+      type: 'number' as const,
+      label: 'Coverflow Rotate',
+      default: 30,
+      min: 0,
+      max: 90,
+      category: 'Effects',
+    },
+    effectCoverflowDepth: {
+      type: 'number' as const,
+      label: 'Coverflow Depth',
+      default: 100,
+      min: 0,
+      max: 400,
+      category: 'Effects',
+    },
+    effectCoverflowStretch: {
+      type: 'number' as const,
+      label: 'Coverflow Stretch',
+      default: 0,
+      min: -200,
+      max: 200,
+      category: 'Effects',
+    },
+    effectCoverflowModifier: {
+      type: 'number' as const,
+      label: 'Coverflow Modifier',
+      default: 1,
+      min: 0.1,
+      max: 3,
+      step: 0.1,
+      category: 'Effects',
+    },
+    effectFlipSlideShadows: {
+      type: 'toggle' as const,
+      label: 'Flip Slide Shadows',
+      default: true,
+      category: 'Effects',
+    },
+    effectCardsPerSlideOffset: {
+      type: 'number' as const,
+      label: 'Cards Offset',
+      default: 8,
+      min: 0,
+      max: 32,
+      category: 'Effects',
+    },
+    effectCardsRotate: {
+      type: 'toggle' as const,
+      label: 'Cards Rotate',
+      default: true,
+      category: 'Effects',
+    },
     hoverEffects: {
       type: 'toggle' as const,
-      label: 'Enable Hover Effects',
-      default: swiperContainerDefaultProps.hoverEffects,
+      label: 'Slide Hover Effects',
+      default: true,
       category: 'Effects',
-      description: 'Add hover animations to slides'
     },
-
     hoverEffectType: {
       type: 'select' as const,
-      label: 'Hover Effect Type',
-      default: swiperContainerDefaultProps.hoverEffectType,
+      label: 'Hover Type',
+      default: 'none',
       options: [
-        { value: 'lift', label: 'Lift with Shadow' },
-        { value: 'scale', label: 'Scale Up' },
-        { value: 'glow', label: 'Glowing Border' },
-        { value: 'tilt', label: '3D Tilt' },
-        { value: 'minimal', label: 'Minimal (Shadow Only)' },
-        { value: 'none', label: 'No Effect' }
+        { value: 'none', label: 'None' },
+        { value: 'zoom', label: 'Zoom' },
+        { value: 'lift', label: 'Lift' },
+        { value: 'dim', label: 'Dim' },
+        { value: 'brighten', label: 'Brighten' },
+        { value: 'glow', label: 'Border Glow' },
       ],
       category: 'Effects',
-      dependsOn: { hoverEffects: true }
     },
-
     hoverIntensity: {
-      type: 'select' as const,
+      type: 'number' as const,
       label: 'Hover Intensity',
-      default: swiperContainerDefaultProps.hoverIntensity,
-      options: [
-        { value: 'light', label: 'Light' },
-        { value: 'medium', label: 'Medium' },
-        { value: 'strong', label: 'Strong' }
-      ],
+      default: 1.06,
+      min: 1,
+      max: 1.2,
+      step: 0.01,
       category: 'Effects',
-      dependsOn: { hoverEffects: true }
     },
-
-    // Behavior Category
-    autoplay: {
-      type: 'toggle' as const,
-      label: 'Auto Play',
-      default: swiperContainerDefaultProps.autoplay,
-      category: 'Behavior',
-    },
-
-    autoplayDelay: {
-      type: 'number' as const,
-      label: 'Auto Play Delay (ms)',
-      default: swiperContainerDefaultProps.autoplayDelay,
-      min: 1000,
-      max: 10000,
-      step: 500,
-      category: 'Behavior',
-    },
-
-    loop: {
-      type: 'toggle' as const,
-      label: 'Infinite Loop',
-      default: swiperContainerDefaultProps.loop,
-      category: 'Behavior',
-    },
-
-    speed: {
-      type: 'number' as const,
-      label: 'Transition Speed (ms)',
-      default: swiperContainerDefaultProps.speed,
-      min: 100,
-      max: 2000,
-      category: 'Behavior',
-    },
-
-    draggable: {
-      type: 'toggle' as const,
-      label: 'Draggable',
-      default: swiperContainerDefaultProps.draggable,
-      category: 'Behavior',
-    },
-
-    grabCursor: {
-      type: 'toggle' as const,
-      label: 'Grab Cursor',
-      default: swiperContainerDefaultProps.grabCursor,
-      category: 'Behavior',
-    },
-
-    freeMode: {
-      type: 'toggle' as const,
-      label: 'Free Mode',
-      default: swiperContainerDefaultProps.freeMode,
-      category: 'Behavior',
-    },
-
-    scrollContainer: {
-      type: 'toggle' as const,
-      label: 'Scroll Container',
-      default: swiperContainerDefaultProps.scrollContainer,
-      category: 'Behavior',
-    },
-
-    mousewheel: {
-      type: 'toggle' as const,
-      label: 'Mousewheel Control',
-      default: swiperContainerDefaultProps.mousewheel,
-      category: 'Behavior',
-    },
-
-    // Navigation Category
-    navigation: {
-      type: 'toggle' as const,
-      label: 'Navigation Arrows',
-      default: swiperContainerDefaultProps.navigation,
-      category: 'Navigation',
-    },
-
-    pagination: {
-      type: 'toggle' as const,
-      label: 'Pagination',
-      default: swiperContainerDefaultProps.pagination,
-      category: 'Navigation',
-    },
-
-    paginationType: {
-      type: 'select' as const,
-      label: 'Pagination Type',
-      default: swiperContainerDefaultProps.paginationType,
-      options: [
-        { value: 'bullets', label: 'Bullets' },
-        { value: 'fraction', label: 'Fraction' },
-        { value: 'progressbar', label: 'Progress Bar' },
-        { value: 'custom', label: 'Custom' },
-      ],
-      category: 'Navigation',
-    },
-
-    paginationDynamic: {
-      type: 'toggle' as const,
-      label: 'Dynamic Bullets',
-      default: swiperContainerDefaultProps.paginationDynamic,
-      category: 'Navigation',
-    },
-
-    paginationProgress: {
-      type: 'toggle' as const,
-      label: 'Show Progress',
-      default: swiperContainerDefaultProps.paginationProgress,
-      category: 'Navigation',
-    },
-
-    scrollbar: {
-      type: 'toggle' as const,
-      label: 'Scrollbar',
-      default: swiperContainerDefaultProps.scrollbar,
-      category: 'Navigation',
-    },
-
-    // Style Category
     backgroundColor: {
       type: 'color' as const,
       label: 'Background Color',
-      default: swiperContainerDefaultProps.backgroundColor,
+      default: 'transparent',
       category: 'Style',
     },
-
-    padding: {
+    borderRadius: {
       type: 'text' as const,
-      label: 'Padding',
-      default: swiperContainerDefaultProps.padding,
+      label: 'Border Radius',
+      default: '0px',
       category: 'Style',
     },
-
-    slideMinHeight: {
+    width: {
       type: 'text' as const,
-      label: 'Slide Min Height',
-      default: swiperContainerDefaultProps.slideMinHeight,
+      label: 'Width',
+      default: '100%',
       category: 'Style',
-    },
-
-    slideWidth: {
-      type: 'text' as const,
-      label: 'Slide Width',
-      default: swiperContainerDefaultProps.slideWidth,
-      category: 'Style',
-    },
-
-    // Parallax Category
-    parallax: {
-      type: 'toggle' as const,
-      label: 'Parallax Effect',
-      default: swiperContainerDefaultProps.parallax,
-      category: 'Parallax',
-    },
-
-    parallaxBackground: {
-      type: 'text' as const,
-      label: 'Parallax Background URL',
-      default: swiperContainerDefaultProps.parallaxBackground,
-      category: 'Parallax',
     },
   },
 }
 
-// ✅ FIXED: ComponentPreview component
+// ─── ComponentPreview ──────────────────────────────────────────────────────────
+
 const ComponentPreview: React.FC<{
   component: LayoutComponent
   context: any
-  onEdit?: () => void
-  onDelete?: () => void
   onComponentSelect?: (component: LayoutComponent, context: any) => void
   onComponentUpdate?: (componentId: string, props: Record<string, any>) => void
-}> = ({ component, context, onEdit, onDelete, onComponentSelect, onComponentUpdate }) => {
-  const [Component, setComponent] = useState<React.ComponentType<any> | null>(null)
-  const [error, setError] = useState<string | null>(null)
+}> = ({ component, context, onComponentSelect, onComponentUpdate }) => {
+  const componentDef = useMemo(
+    () => componentRegistry.getComponent(component.type),
+    [component.type]
+  )
 
-  useEffect(() => {
-    const loadComponent = async () => {
-      try {
-        switch (component.type) {
-          case 'NewGrid':
-            const NewGridModule = await import('./NewGrid')
-            const NewGridComponent = NewGridModule.default || (NewGridModule as any).NewGrid
-            setComponent(() => NewGridComponent)
-            break
-          case 'advancedImage':
-            const AdvancedImageModule = await import('./AdvancedImageComponent')
-            const AdvancedImageComponent = AdvancedImageModule.default || (AdvancedImageModule as any).AdvancedImageComponent
-            setComponent(() => AdvancedImageComponent)
-            break
-          case 'advancedCard':
-            const AdvancedCardModule = await import('./AdvancedCardComponent')
-            const AdvancedCardComponent = AdvancedCardModule.default || (AdvancedCardModule as any).AdvancedCardComponent
-            setComponent(() => AdvancedCardComponent)
-            break
-          case 'advancedheading':
-            const AdvancedHeadingModule = await import('./AdvancedHeading')
-            const AdvancedHeadingComponent = AdvancedHeadingModule.default || (AdvancedHeadingModule as any).AdvancedHeading
-            setComponent(() => AdvancedHeadingComponent)
-            break
-          case 'advancedparagraph':
-            const AdvancedParagraphModule = await import('./AdvancedParagraph')
-            const AdvancedParagraphComponent = AdvancedParagraphModule.default || (AdvancedParagraphModule as any).AdvancedParagraph
-            setComponent(() => AdvancedParagraphComponent)
-            break
-          case 'advancedbutton':
-            const AdvancedButtonModule = await import('./AdvancedButton')
-            const AdvancedButtonComponent = AdvancedButtonModule.default || (AdvancedButtonModule as any).AdvancedButton
-            setComponent(() => AdvancedButtonComponent)
-            break
-          case 'carousel':
-            const CarouselModule = await import('./Carousel')
-            const CarouselComponent = CarouselModule.default || (CarouselModule as any).Carousel
-            setComponent(() => CarouselComponent)
-            break
-          case 'advancedaccordion':
-            const AdvancedAccordionModule = await import('./AdvancedAccordion')
-            const AdvancedAccordionComponent = AdvancedAccordionModule.default || (AdvancedAccordionModule as any).AdvancedAccordion
-            setComponent(() => AdvancedAccordionComponent)
-            break
-          case 'advancedlist':
-            const AdvancedListModule = await import('./AdvancedList')
-            const AdvancedListComponent = AdvancedListModule.default || (AdvancedListModule as any).AdvancedList
-            setComponent(() => AdvancedListComponent)
-            break
-          case 'swipercontainer':
-            const SwiperContainerModule = await import('./SwiperContainer')
-            const SwiperContainerComponent = SwiperContainerModule.default || (SwiperContainerModule as any).SwiperContainer
-            setComponent(() => SwiperContainerComponent)
-            break
-          default:
-            setComponent(() => () => (
-              <div className="p-4 border border-gray-300 rounded bg-gray-50 text-center">
-                <div className="text-2xl mb-2">📦</div>
-                <div className="font-medium text-gray-700">{component.type}</div>
-                <div className="text-sm text-gray-500">Component Type</div>
-              </div>
-            ))
-        }
-      } catch (err) {
-        console.error('Error loading component:', err)
-        setError(err instanceof Error ? err.message : 'Unknown error')
-        setComponent(() => () => (
-          <div className="p-4 border border-red-300 rounded bg-red-50 text-center">
-            <div className="text-red-600">Error loading {component.type}</div>
-            <div className="text-xs text-red-500 mt-1">{err instanceof Error ? err.message : 'Unknown error'}</div>
-          </div>
-        ))
-      }
-    }
-
-    loadComponent()
-  }, [component.type])
-
-  if (error) {
+  if (!componentDef?.render) {
     return (
-      <div className="p-4 border border-red-300 rounded bg-red-50 text-center">
-        <div className="text-red-600">Error loading {component.type}</div>
-        <div className="text-xs text-red-500 mt-1">{error}</div>
+      <div className="sc-unknown">
+        <span>📦</span>
+        <span>{component.type}</span>
       </div>
     )
   }
 
-  if (!Component) {
-    return (
-      <div className="p-4 border border-gray-300 rounded bg-gray-50 animate-pulse">
-        <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
-        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-      </div>
-    )
-  }
+  const rendered = componentDef.render({
+    ...component.props,
+    component,
+    onUpdate: (p: Record<string, any>) => onComponentUpdate?.(component.id, p),
+    onComponentSelect,
+    onComponentUpdate,
+    sectionId: context.sectionId,
+    containerId: context.containerId,
+    rowId: context.rowId,
+    colId: context.colId,
+  })
 
   return (
-    <div className="relative group w-full max-w-full overflow-hidden">
-      <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={onEdit} className="bg-blue-500 text-white p-1 rounded hover:bg-blue-600 text-xs" title="Edit Component">
-          Edit
-        </button>
-        <button onClick={onDelete} className="bg-red-500 text-white p-1 rounded hover:bg-red-600 text-xs" title="Delete Component">
-          ×
-        </button>
-      </div>
-
-      <Component
-        {...component.props}
-        component={component}
-        onUpdate={(newProps: Record<string, any>) => {
-          if (onComponentUpdate) {
-            onComponentUpdate(component.id, newProps)
-          }
-        }}
-        onSelect={() => {
-          if (onComponentSelect) {
-            onComponentSelect(component, context)
-          }
-        }}
-        sectionId={context.sectionId}
-        containerId={context.containerId}
-        rowId={context.rowId}
-        colId={context.colId}
-        onComponentSelect={onComponentSelect}
-        onComponentUpdate={onComponentUpdate}
-      />
+    <div
+      className="sc-comp"
+      onClick={(e) => {
+        e.stopPropagation()
+        onComponentSelect?.(component, context)
+      }}
+    >
+      {rendered}
     </div>
   )
 }
 
-// ✅ FIXED: Slide Component with Optional Hover Effects
+// ─── Slide ─────────────────────────────────────────────────────────────────────
+
 const Slide: React.FC<{
   slide: SlideType
   slideIndex: number
   swiperId: string
   sectionId: string
   containerId: string
+  totalSlides: number
   onDeleteSlide: (index: number) => void
   onComponentSelect?: (component: LayoutComponent, context: any) => void
   onComponentUpdate?: (componentId: string, props: Record<string, any>) => void
-  deleteComponent?: (componentId: string, context?: any) => void
   onSlideUpdate: (slideIndex: number, updatedSlide: SlideType) => void
   isEditing: boolean
   slideMinHeight: string
-  hoverEffects?: boolean
-  hoverEffectType?: HoverEffectType
-  hoverIntensity?: HoverIntensity
   isClone?: boolean
 }> = ({
   slide,
@@ -632,25 +541,18 @@ const Slide: React.FC<{
   swiperId,
   sectionId,
   containerId,
+  totalSlides,
   onDeleteSlide,
   onComponentSelect,
   onComponentUpdate,
-  deleteComponent,
   onSlideUpdate,
   isEditing,
   slideMinHeight,
-  hoverEffects = true,
-  hoverEffectType = 'lift',
-  hoverIntensity = 'medium',
   isClone = false,
 }) => {
-  const dropZoneId = `swiper-${swiperId}-slide-${slideIndex}${isClone ? '-clone' : ''}`
-  const [isHovered, setIsHovered] = useState(false)
-  const [isActive, setIsActive] = useState(false)
-  const [tiltAngle, setTiltAngle] = useState({ x: 0, y: 0 })
-
+  const dropId = `swiper-${swiperId}-slide-${slideIndex}${isClone ? '-clone' : ''}`
   const { isOver, setNodeRef } = useDroppable({
-    id: dropZoneId,
+    id: dropId,
     data: {
       type: 'swiper-slide',
       swiperId,
@@ -661,342 +563,180 @@ const Slide: React.FC<{
       colId: 'swiper-content',
       isClone,
       accepts: [
-        'text',
-        'button',
-        'image',
-        'card',
-        'grid',
-        'NewGrid',
-        'advancedImage',
-        'advancedCard',
-        'advancedheading',
-        'advancedparagraph',
-        'advancedbutton',
-        'richtext',
-        'video',
-        'icon',
-        'divider',
-        'advancedaccordion',
-        'tabs',
-        'advancedlist',
-        'carousel',
-        'swipercontainer',
-        'flexbox',
-        'container',
-        'spacer',
+        'text','button','image','card','grid','NewGrid','advancedImage',
+        'advancedCard','advancedheading','advancedparagraph','advancedbutton',
+        'richtext','video','icon','divider','advancedaccordion','tabs',
+        'advancedlist','swipercontainer','flexbox','container','spacer',
       ],
     },
   })
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (hoverEffectType !== 'tilt' || !hoverEffects || isEditing) return
-    
-    const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    
-    const centerX = rect.width / 2
-    const centerY = rect.height / 2
-    
-    // Adjust tilt intensity based on hoverIntensity
-    const intensityMap = {
-      light: 15,
-      medium: 25,
-      strong: 35
+  // ── Resolve background ──────────────────────────────────────────────────────
+  const bgType = slide.bgType || (slide.bgImage ? 'image' : slide.bgGradient ? 'gradient' : 'color')
+  const bgColor = slide.bgColor || slide.backgroundColor || '#1a1d28'
+  const hasComps = (slide.components?.length || 0) > 0
+  const minH = hasComps ? (slide.minHeight || slideMinHeight || '120px') : '120px'
+  const pad = slide.padding || '12px'
+  const previewLabel = (slide.title || '').trim() || getPreviewLabel(slideIndex)
+  const normalizedBg = String(bgColor).trim().toLowerCase()
+  const previewFriendlyBg = [
+    '#1a1d28',
+    '#fff',
+    '#ffffff',
+    '#f0f0f0',
+    '#e0e0e0',
+    '#d0d0d0',
+    '#c0c0c0',
+    '#b0b0b0',
+    'white',
+    'transparent',
+  ].includes(normalizedBg)
+
+  const bgStyle: React.CSSProperties = (() => {
+    if (bgType === 'image' && slide.bgImage)
+      return { backgroundImage: `url(${slide.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    if (bgType === 'gradient' && slide.bgGradient)
+      return { backgroundImage: slide.bgGradient }
+    return { backgroundColor: bgColor }
+  })()
+
+  const cardStyle: React.CSSProperties = { minHeight: minH, padding: pad, ...bgStyle }
+  if (!slide.bgImage && !slide.bgGradient && previewFriendlyBg) {
+    cardStyle.backgroundImage = getPreviewGradient(slideIndex)
+    cardStyle.backgroundColor = 'transparent'
+    if (String(pad).trim() === '20px' || String(pad).trim() === '20px 20px') {
+      cardStyle.padding = '12px'
     }
-    
-    const intensity = intensityMap[hoverIntensity] || 25
-    
-    setTiltAngle({
-      x: (y - centerY) / intensity,
-      y: (centerX - x) / intensity
+  }
+
+  const deleteChild = (ci: number) => {
+    onSlideUpdate(slideIndex, {
+      ...slide,
+      components: slide.components?.filter((_, i) => i !== ci) || [],
     })
   }
 
-  const handleMouseLeave = () => {
-    setIsHovered(false)
-    setTiltAngle({ x: 0, y: 0 })
-  }
-
-  const handleComponentAction = (action: 'edit' | 'delete', childComponent: LayoutComponent, childIndex: number) => {
-    if (action === 'edit' && onComponentSelect) {
-      onComponentSelect(childComponent, {
-        sectionId,
-        containerId: containerId || swiperId,
-        rowId: `slide-${slideIndex}`,
-        colId: `component-${childIndex}`,
-        slideIndex,
-        source: 'swiper-slide' as const,
-      })
-    } else if (action === 'delete') {
-      const updatedSlide = {
-        ...slide,
-        components: slide.components?.filter((_: LayoutComponent, index: number) => index !== childIndex) || [],
-      }
-      onSlideUpdate(slideIndex, updatedSlide)
-    }
-  }
-
-  const componentCount = slide.components?.length || 0
-
-  // Get hover effect styles based on configuration
-  const getHoverStyle = () => {
-    if (!hoverEffects || hoverEffectType === 'none' || isEditing) {
-      return {}
-    }
-
-    const intensityMap = {
-      light: { scale: 1.02, lift: 4, shadow: '0 10px 25px rgba(0, 0, 0, 0.1)' },
-      medium: { scale: 1.03, lift: 8, shadow: '0 15px 35px rgba(0, 0, 0, 0.15)' },
-      strong: { scale: 1.04, lift: 12, shadow: '0 20px 50px rgba(0, 0, 0, 0.2)' }
-    }
-
-    const intensity = intensityMap[hoverIntensity] || intensityMap.medium
-
-    switch (hoverEffectType) {
-      case 'lift':
-        return {
-          transform: `translateY(-${intensity.lift}px) scale(${intensity.scale})`,
-          boxShadow: intensity.shadow,
-          zIndex: 10
-        }
-      
-      case 'scale':
-        return {
-          transform: `scale(${intensity.scale})`,
-          zIndex: 10
-        }
-      
-      case 'tilt':
-        return {
-          transform: `perspective(1000px) rotateX(${tiltAngle.x}deg) rotateY(${tiltAngle.y}deg) translateZ(20px)`,
-          boxShadow: intensity.shadow,
-          zIndex: 10
-        }
-      
-      case 'minimal':
-        return {
-          boxShadow: intensity.shadow,
-          zIndex: 10
-        }
-      
-      case 'glow':
-        return {
-          transform: `translateY(-${intensity.lift}px)`,
-          boxShadow: `0 0 30px rgba(59, 130, 246, 0.3), ${intensity.shadow}`,
-          borderColor: '#3b82f6',
-          zIndex: 10
-        }
-      
-      default:
-        return {}
-    }
-  }
-
-  // Get base slide style
-  const getSlideStyle = () => {
-    const baseStyle = {
-      backgroundColor: slide.backgroundColor || '#ffffff',
-      padding: slide.padding || '20px',
-      minHeight: slideMinHeight,
-      height: '100%',
-      overflow: 'hidden',
-      position: 'relative' as const,
-      transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-      borderWidth: '2px',
-      borderStyle: 'solid',
-      borderColor: isOver 
-        ? '#93c5fd' 
-        : (isClone ? '#f59e0b' : '#e5e7eb'),
-    }
-
-    const hoverStyle = getHoverStyle()
-
-    return {
-      ...baseStyle,
-      ...(isHovered ? hoverStyle : {})
-    }
+  const editChild = (child: LayoutComponent, ci: number) => {
+    onComponentSelect?.(child, {
+      sectionId,
+      containerId: containerId || swiperId,
+      rowId: `slide-${slideIndex}`,
+      colId: `component-${ci}`,
+      slideIndex,
+      source: 'swiper-slide',
+    })
   }
 
   return (
     <div
       ref={setNodeRef}
-      className="h-full w-full"
-      style={{
-        minHeight: slideMinHeight,
-        height: '100%',
-        position: 'relative',
-      }}
-      onMouseEnter={() => !isEditing && setIsHovered(true)}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      onClick={() => !isEditing && setIsActive(true)}
-      onBlur={() => !isEditing && setIsActive(false)}>
-      
-      {/* Hover effect overlay for glow effect */}
-      {hoverEffects && hoverEffectType === 'glow' && isHovered && !isEditing && (
-        <div className="absolute inset-0 z-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-lg" />
-      )}
-
-      {/* Active Highlight Border */}
-      {isActive && !isEditing && (
-        <div className="absolute inset-0 z-0 border-2 border-blue-400 rounded-lg animate-pulse" />
-      )}
-
+      className="sc-slide-root"
+      style={{ minHeight: minH }}
+      data-slide-index={slideIndex}
+    >
       <div
-        className={`h-full rounded-lg transition-all duration-300 ${isEditing ? 'border-2' : 'border'} ${isClone ? 'border-dashed border-yellow-400' : ''}`}
-        style={getSlideStyle()}>
-        
-        {/* Hover Indicator */}
-        {isHovered && hoverEffects && !isEditing && hoverEffectType !== 'none' && (
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-t-lg opacity-70" />
+        className={[
+          'sc-card',
+          isOver    ? 'sc-card--over'  : '',
+          isClone   ? 'sc-card--clone' : '',
+        ].join(' ')}
+        style={cardStyle}
+      >
+        {/* Overlay */}
+        {slide.bgOverlay && (
+          <div className="sc-overlay" style={{
+            backgroundColor: slide.bgOverlayColor || '#000',
+            opacity: typeof slide.bgOverlayOpacity === 'number' ? slide.bgOverlayOpacity : 0.4,
+          }} />
         )}
 
-        {isClone && isEditing && (
-          <div className="absolute top-2 left-2 z-10 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded shadow-sm">
-            Clone
-          </div>
-        )}
-        
-        <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${isHovered ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'}`} />
-              <span className="text-sm font-semibold text-gray-700">Slide {slideIndex + 1}</span>
-              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded transition-colors duration-300 hover:bg-gray-200">
-                {componentCount} component{componentCount !== 1 ? 's' : ''}
-              </span>
-              {isClone && (
-                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded shadow-sm">
-                  Clone
-                </span>
-              )}
-            </div>
-            {isOver && (
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded animate-pulse flex items-center gap-1">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping" />
-                Drop here
-              </span>
-            )}
-            {isHovered && hoverEffects && !isEditing && hoverEffectType !== 'none' && (
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded flex items-center gap-1">
-                <span className="w-2 h-2 bg-green-500 rounded-full" />
-                {hoverEffectType.charAt(0).toUpperCase() + hoverEffectType.slice(1)} Effect
-              </span>
-            )}
-          </div>
+        {/* Drop pulse ring */}
+        {isOver && <div className="sc-drop-ring" />}
 
-          {isEditing && !isClone && (
+        {/* ── Editor top micro-bar ─────────────────────────────────────────── */}
+        {isEditing && (
+          <div className="sc-bar">
+            {(hasComps || slide.title || slide.subtitle) && (
+              <span className="sc-bar-num">
+                {slideIndex + 1}
+                <span className="sc-bar-of">/{totalSlides}</span>
+              </span>
+            )}
+            {isClone && <span className="sc-chip sc-chip--y">Clone</span>}
+            {isOver  && <span className="sc-chip sc-chip--p">Drop</span>}
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onDeleteSlide(slideIndex)
-              }}
-              className="p-1.5 hover:bg-red-50 rounded-lg text-red-500 hover:text-red-700 transition-all duration-200 hover:scale-110"
-              title="Delete Slide">
-              <Trash2 size={16} />
+              className="sc-del"
+              onClick={(e) => { e.stopPropagation(); onDeleteSlide(slideIndex) }}
+              title="Delete slide"
+            >
+              <Trash2 size={11} />
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div 
-          className="h-[calc(100%-60px)] overflow-y-auto pr-2">
-          
-          {slide.components && slide.components.length > 0 ? (
-            <div className="space-y-4">
-              {slide.components.map((childComponent: LayoutComponent, childIndex: number) => {
-                const componentContext = {
+        {/* Quick title/subtitle */}
+        {hasComps && (slide.title || slide.subtitle) && (
+          <div className="sc-quickcontent">
+            {slide.title    && <p className="sc-qt">{slide.title}</p>}
+            {slide.subtitle && <p className="sc-qs">{slide.subtitle}</p>}
+          </div>
+        )}
+
+        {/* ── Content area ─────────────────────────────────────────────────── */}
+        <div className={`sc-body ${isEditing && hasComps ? 'sc-body--editing' : ''}`}>
+          {hasComps ? (
+            <div className="sc-comps">
+              {slide.components.map((child: LayoutComponent, ci: number) => {
+                const ctx = {
                   sectionId,
                   containerId: containerId || swiperId,
                   rowId: `slide-${slideIndex}`,
-                  colId: `component-${childIndex}`,
+                  colId: `component-${ci}`,
                   slideIndex,
-                  source: 'swiper-slide' as const,
+                  source: 'swiper-slide',
                 }
-
                 return (
-                  <div
-                    key={childComponent.id || `component-${childIndex}`}
-                    className={`p-4 rounded-lg border transition-all duration-300 hover:border-blue-300 hover:shadow-md ${
-                      isEditing ? 'border-2 border-blue-200 bg-blue-50/30' : 'border-gray-200 bg-gray-50/30'
-                    }`}>
+                  <div key={child.id || `c-${ci}`} className="sc-child">
                     {isEditing && (
-                      <div className="flex justify-between items-center mb-3 pb-2 border-b border-blue-200">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-blue-700 text-sm capitalize">{childComponent.type.replace('advanced', '')}</span>
-                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">#{childIndex + 1}</span>
-                        </div>
-                        <div className="flex gap-1">
-                          <button
-                            className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 transition-all duration-200 hover:scale-105"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleComponentAction('edit', childComponent, childIndex)
-                            }}
-                            title="Edit Component">
-                            Edit
-                          </button>
-                          <button
-                            className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 transition-all duration-200 hover:scale-105"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleComponentAction('delete', childComponent, childIndex)
-                            }}
-                            title="Delete Component">
-                            ×
-                          </button>
+                      <div className="sc-child-bar">
+                        <span className="sc-child-type">
+                          {child.type.replace('advanced', '')}
+                        </span>
+                        <div className="sc-child-actions">
+                          <button className="sc-cbtn" onClick={(e) => { e.stopPropagation(); editChild(child, ci) }}>Edit</button>
+                          <button className="sc-cbtn sc-cbtn--del" onClick={(e) => { e.stopPropagation(); deleteChild(ci) }}>×</button>
                         </div>
                       </div>
                     )}
-
-                    <div className="mt-2 transform transition-transform duration-300 hover:scale-[1.01]">
-                      <ComponentPreview
-                        component={childComponent}
-                        context={componentContext}
-                        onEdit={() => handleComponentAction('edit', childComponent, childIndex)}
-                        onDelete={() => handleComponentAction('delete', childComponent, childIndex)}
-                        onComponentSelect={onComponentSelect}
-                        onComponentUpdate={onComponentUpdate}
-                      />
-                    </div>
+                    <ComponentPreview
+                      component={child}
+                      context={ctx}
+                      onComponentSelect={onComponentSelect}
+                      onComponentUpdate={onComponentUpdate}
+                    />
                   </div>
                 )
               })}
             </div>
           ) : (
-            <div 
-              className="h-full flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 group"
-              onMouseEnter={() => setIsHovered(true)}
-              onMouseLeave={() => setIsHovered(false)}>
-              <div className="text-4xl mb-4 text-gray-400 group-hover:text-blue-400 transition-colors duration-300">📦</div>
-              <p className="text-gray-600 font-medium mb-2 group-hover:text-blue-600 transition-colors duration-300">Empty Slide</p>
-              <p className="text-gray-500 text-sm mb-4 group-hover:text-blue-500 transition-colors duration-300">
-                {isEditing ? 'Drop components here or add from the toolbar' : 'No content in this slide'}
-              </p>
+            <div className={`sc-empty-preview ${isOver ? 'sc-empty-preview--over' : ''}`}>
+              <div className="sc-preview-num">{String(slideIndex + 1).padStart(2, '0')}</div>
+              <div className="sc-preview-label">{previewLabel}</div>
               {isEditing && (
-                <button className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 transition-all duration-300 transform hover:scale-105">
-                  + Add Component
-                </button>
-              )}
-              {isHovered && !isEditing && (
-                <div className="mt-4 text-xs text-gray-400 animate-pulse">
-                  Click to select this slide
+                <div className="sc-drop-hint">
+                  {(slide.subtitle || '').trim() || 'Drop components here'}
                 </div>
               )}
             </div>
           )}
         </div>
-
-        {/* Bottom hover indicator */}
-        {isHovered && hoverEffects && !isEditing && hoverEffectType !== 'none' && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-b-lg opacity-50" />
-        )}
       </div>
     </div>
   )
 }
 
-// ✅ FIXED: SwiperContainer Component
+// ─── SwiperContainer ──────────────────────────────────────────────────────────
+
 const SwiperContainer: React.FC<SwiperContainerProps> = ({
   id,
   component: propComponent,
@@ -1007,823 +747,849 @@ const SwiperContainer: React.FC<SwiperContainerProps> = ({
   deleteComponent,
   sectionId = '',
   containerId = '',
-  rowId = '',
-  colId = '',
   isEditing = true,
-  hoverEffects = true,
-  hoverEffectType = 'lift',
-  hoverIntensity = 'medium',
   ...props
 }) => {
-  const componentProps = { ...swiperContainerDefaultProps, ...props, hoverEffects, hoverEffectType, hoverIntensity }
-  const componentId = id || propComponent?.id || `swiper-${Date.now()}`
+  const cp = { ...swiperContainerDefaultProps, ...(props as any) }
+  const cid = id || propComponent?.id || `swiper-${Date.now()}`
 
-  // Get initial slides
-  const getCurrentSlides = (): SlideType[] => {
-    if (propComponent?.props?.slides) {
-      return propComponent.props.slides
-    }
-    if (propSlides && propSlides.length > 0) {
-      return propSlides
-    }
-    return componentProps.slides
+  const getSlides = (): SlideType[] => {
+    if (propComponent?.props?.slides?.length) return propComponent.props.slides
+    if (propSlides?.length) return propSlides
+    return cp.slides
   }
 
-  const [currentSlides, setCurrentSlides] = useState<SlideType[]>(getCurrentSlides())
-  const [swiperInstance, setSwiperInstance] = useState<SwiperType | null>(null)
-  const [autoPlayActive, setAutoPlayActive] = useState(componentProps.autoplay)
-  const updateTimeoutRef = useRef<NodeJS.Timeout>()
+  const [slides, setSlides]               = useState<SlideType[]>(getSlides)
+  const [swiper, setSwiper]               = useState<SwiperType | null>(null)
+  const [activeIdx, setActiveIdx]         = useState(0)
+  const timerRef                          = useRef<NodeJS.Timeout>()
 
-  // Update slides when props change
+  useEffect(() => { setSlides(getSlides()) }, [propComponent, propSlides])
   useEffect(() => {
-    const newSlides = getCurrentSlides()
-    setCurrentSlides(newSlides)
-  }, [propComponent, propSlides, componentProps.slides])
+    if (activeIdx >= slides.length) setActiveIdx(Math.max(0, slides.length - 1))
+  }, [slides.length])
+  useEffect(() => () => clearTimeout(timerRef.current), [])
 
-  const getSlidesPerView = (): number | 'auto' => {
-    const effect = componentProps.effect || 'slide'
-    
-    // ✅ FIXED: Use string array includes for type safety
-    const specialEffects: SwiperEffect[] = ['fade', 'cube', 'flip', 'cards', 'creative']
-    if (specialEffects.includes(effect as SwiperEffect)) {
-      return 1
-    }
-    
-    const slidesPerView = componentProps.slidesPerView
-    if (typeof slidesPerView === 'string') {
-      if (slidesPerView === 'auto') return 'auto'
-      const parsed = parseInt(slidesPerView)
-      return isNaN(parsed) ? 1 : parsed
-    }
-    
-    return slidesPerView
+  const spv: number | 'auto' = (() => {
+    const v = cp.slidesPerView
+    if (v === 'auto') return 'auto'
+    const n = parseInt(String(v)); return isNaN(n) ? 1 : n
+  })()
+
+  const spvNum = typeof spv === 'number' ? spv : 1
+
+  const loopOk = useMemo(() => {
+    if (!cp.loop) return false
+    const n = slides.length
+    return cp.centeredSlides ? n >= spvNum + 2 : n >= spvNum + 1
+  }, [cp.loop, cp.centeredSlides, slides.length, spvNum])
+  const canLoop = Boolean(cp.loop) && loopOk
+  const canAutoplay = Boolean(cp.autoplay) && slides.length > 1
+
+  const push = (newProps: Record<string, any>) => {
+    if (newProps.slides) setSlides(newProps.slides)
+    clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => onUpdate?.(newProps), 300)
   }
 
-  // Calculate if loop should be enabled
-  const shouldEnableLoop = useMemo(() => {
-    if (!componentProps.loop) return false
-    
-    const effect = componentProps.effect || 'slide'
-    const slidesPerView = getSlidesPerView()
-    const slidesCount = currentSlides.length
-    
-    // ✅ FIXED: Use string array includes for type safety
-    const fadeFlipCreative: SwiperEffect[] = ['fade', 'flip', 'creative']
-    const cubeCoverflowCards: SwiperEffect[] = ['cube', 'coverflow', 'cards']
-    
-    if (fadeFlipCreative.includes(effect as SwiperEffect)) {
-      return slidesCount >= 3
-    }
-    
-    if (cubeCoverflowCards.includes(effect as SwiperEffect)) {
-      return slidesCount >= 4
-    }
-    
-    // For slide effect, calculate based on slidesPerView
-    if (effect === 'slide') {
-      const spv = typeof slidesPerView === 'number' ? slidesPerView : 1
-      
-      // Minimum required: slidesPerView + 2 (for centeredSlides) OR slidesPerView + 1
-      if (componentProps.centeredSlides) {
-        return slidesCount >= spv + 2
-      }
-      return slidesCount >= spv + 1
-    }
-    
-    return false
-  }, [componentProps.loop, componentProps.effect, componentProps.centeredSlides, currentSlides.length, componentProps.slidesPerView])
-
-  // Handle adding a new slide
-  const handleAddSlide = () => {
-    const newSlide: SlideType = {
-      id: `slide-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      components: [],
-      backgroundColor: `#${Math.floor(Math.random()*16777215).toString(16)}`,
-      padding: '20px',
-    }
-
-    const updatedSlides = [...currentSlides, newSlide]
-    updateComponent({ slides: updatedSlides })
-
-    setTimeout(() => {
-      if (swiperInstance) {
-        swiperInstance.slideTo(updatedSlides.length - 1)
-      }
-    }, 100)
+  const addSlide = () => {
+    const s = createDefaultSlide(
+      `slide-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      slides.length
+    )
+    s.minHeight = cp.slideMinHeight || '120px'
+    const next = [...slides, s]
+    push({ slides: next })
+    setTimeout(() => swiper?.slideTo(next.length - 1), 100)
   }
 
-  // Handle deleting a slide
-  const handleDeleteSlide = (slideIndex: number) => {
-    if (currentSlides.length <= 1) return
-
-    const updatedSlides = currentSlides.filter((_: SlideType, index: number) => index !== slideIndex)
-    updateComponent({ slides: updatedSlides })
+  const delSlide = (i: number) => {
+    if (slides.length <= 1) return
+    push({ slides: slides.filter((_, idx) => idx !== i) })
   }
 
-  // Handle slide updates
-  const handleSlideUpdate = (slideIndex: number, updatedSlide: SlideType) => {
-    const updatedSlides = [...currentSlides]
-    updatedSlides[slideIndex] = updatedSlide
-    updateComponent({ slides: updatedSlides })
+  const updateSlide = (i: number, updated: SlideType) => {
+    const arr = [...slides]; arr[i] = updated; push({ slides: arr })
   }
 
-  // Update component props
-  const updateComponent = (newProps: Record<string, any>) => {
-    if (newProps.slides) {
-      setCurrentSlides(newProps.slides)
-    }
+  // ── Swiper config ─────────────────────────────────────────────────────────
+  const swiperCfg = useMemo(() => {
+    const effectName = String(cp.effect || 'slide')
+    const singleSlideEffects = ['cube', 'flip', 'cards']
+    const forceSingleSlide = singleSlideEffects.includes(effectName)
+    const paginationType = cp.paginationType === 'lines' || cp.paginationType === 'numbered'
+      ? 'bullets'
+      : cp.paginationType
 
-    if (updateTimeoutRef.current) {
-      clearTimeout(updateTimeoutRef.current)
-    }
-
-    updateTimeoutRef.current = setTimeout(() => {
-      if (onUpdate) {
-        onUpdate(newProps)
-      }
-    }, 300)
-  }
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current)
-      }
-    }
-  }, [])
-
-  // Toggle autoplay
-  const toggleAutoPlay = () => {
-    if (!swiperInstance) return
-
-    if (autoPlayActive) {
-      swiperInstance.autoplay?.stop()
-    } else {
-      swiperInstance.autoplay?.start()
-    }
-    setAutoPlayActive(!autoPlayActive)
-  }
-
-  // Get required modules
-  const getSwiperModules = () => {
-    const effect = componentProps.effect || 'slide'
-    const modules = [
-      Navigation,
-      Pagination,
-      Autoplay,
-      Mousewheel,
-      Scrollbar,
-      FreeMode,
-      Keyboard,
-      Controller
-    ]
-
-    // ✅ FIXED: Use type-safe comparisons
-    if (effect === 'fade') modules.push(EffectFade)
-    if (effect === 'cube') modules.push(EffectCube)
-    if (effect === 'coverflow') modules.push(EffectCoverflow)
-    if (effect === 'flip') modules.push(EffectFlip)
-    if (effect === 'cards') modules.push(EffectCards)
-    if (effect === 'creative') modules.push(EffectCreative)
-    if (componentProps.parallax) modules.push(Parallax)
-
-    return modules
-  }
-
-  // Get effect configuration
-  const getEffectConfig = () => {
-    const effect = componentProps.effect || 'slide'
-
-    // ✅ FIXED: Use a type-safe switch statement
-    switch (effect) {
-      case 'fade':
-        return {
-          fadeEffect: {
-            crossFade: Boolean(componentProps.effectFadeCrossFade),
-          },
-        }
-      case 'cube':
-        return {
-          cubeEffect: {
-            shadow: Boolean(componentProps.effectCubeShadow),
-            shadowScale: parseFloat(String(componentProps.effectCubeShadowScale)) || 0.94,
-            slideShadows: true,
-          },
-        }
-      case 'coverflow':
-        return {
-          coverflowEffect: {
-            rotate: parseFloat(String(componentProps.effectCoverflowRotate)) || 30,
-            stretch: parseFloat(String(componentProps.effectCoverflowStretch)) || 0,
-            depth: parseFloat(String(componentProps.effectCoverflowDepth)) || 100,
-            modifier: 1,
-            slideShadows: true,
-          },
-        }
-      case 'flip':
-        return {
-          flipEffect: {
-            slideShadows: Boolean(componentProps.effectFlipSlideShadows),
-            limitRotation: Boolean(componentProps.effectFlipLimitRotation),
-          },
-        }
-      case 'cards':
-        return {
-          cardsEffect: {
-            perSlideOffset: parseFloat(String(componentProps.effectCardsPerSlideOffset)) || 8,
-            perSlideRotate: 2,
-            rotate: true,
-            slideShadows: true,
-          },
-        }
-      case 'creative':
-        return {
-          creativeEffect: {
-            prev: componentProps.effectCreativePrev || { translate: ['-120%', 0, -500] },
-            next: componentProps.effectCreativeNext || { translate: ['120%', 0, -500] },
-            perspective: true,
-          },
-        }
-      default:
-        return {}
-    }
-  }
-
-  // Get Swiper configuration
-  const getSwiperConfig = () => {
-    const effect = componentProps.effect || 'slide'
-    const slidesPerView = getSlidesPerView()
-    
-    const config: any = {
-      modules: getSwiperModules(),
-      direction: componentProps.direction as 'horizontal' | 'vertical',
-      slidesPerView: slidesPerView,
-      spaceBetween: parseFloat(String(componentProps.spaceBetween)) || 20,
-      speed: parseFloat(String(componentProps.speed)) || 500,
-      
-      // Navigation
-      grabCursor: isEditing ? false : Boolean(componentProps.grabCursor),
-      allowTouchMove: isEditing ? false : Boolean(componentProps.draggable),
-      mousewheel: isEditing ? false : {
-        enabled: Boolean(componentProps.mousewheel),
-        forceToAxis: Boolean(componentProps.mousewheelForceToAxis),
-        sensitivity: parseFloat(String(componentProps.mousewheelSensitivity)) || 1,
-      },
-      
-      // ✅ FIXED: Type-safe effect handling
-      effect: effect !== 'slide' ? effect : undefined,
-      freeMode: effect === 'slide' && Boolean(componentProps.freeMode),
-      
-      // Loop
-      loop: shouldEnableLoop,
-      
-      // Observer
+    const cfg: any = {
+      modules: [
+        Navigation,
+        Pagination,
+        Autoplay,
+        Mousewheel,
+        Scrollbar,
+        FreeMode,
+        Keyboard,
+        Controller,
+        EffectFade,
+        EffectCube,
+        EffectCoverflow,
+        EffectFlip,
+        EffectCards,
+      ],
+      direction: cp.direction,
+      slidesPerView: forceSingleSlide ? 1 : spv,
+      slidesPerGroup: parseInt(String(cp.slidesPerGroup)) || 1,
+      spaceBetween: parseFloat(String(cp.spaceBetween)) || 12,
+      speed: parseFloat(String(cp.speed)) || 500,
+      grabCursor: !isEditing && Boolean(cp.grabCursor),
+      allowTouchMove: !isEditing && Boolean(cp.draggable),
+      mousewheel: !isEditing && Boolean(cp.mousewheel),
+      freeMode: Boolean(cp.freeMode),
+      loop: canLoop,
+      centeredSlides: Boolean(cp.centeredSlides),
       observer: true,
       observeParents: true,
       watchSlidesProgress: true,
-      watchOverflow: true,
-      resistance: true,
-      resistanceRatio: 0.85,
-      slideToClickedSlide: true,
+      effect: effectName,
     }
 
-    // ✅ FIXED: Type-safe centeredSlides
-    if (effect === 'coverflow') {
-      config.centeredSlides = true
-    } else {
-      config.centeredSlides = Boolean(componentProps.centeredSlides)
+    if (effectName === 'fade') {
+      cfg.fadeEffect = { crossFade: Boolean(cp.effectFadeCrossFade) }
     }
-
-    // Navigation
-    if (componentProps.navigation) {
-      config.navigation = {
-        nextEl: '.swiper-button-next',
-        prevEl: '.swiper-button-prev',
-        disabledClass: 'swiper-button-disabled',
+    if (effectName === 'cube') {
+      cfg.cubeEffect = {
+        shadow: Boolean(cp.effectCubeShadow),
+        slideShadows: Boolean(cp.effectCubeSlideShadows),
+      }
+    }
+    if (effectName === 'coverflow') {
+      cfg.coverflowEffect = {
+        rotate: parseFloat(String(cp.effectCoverflowRotate)) || 30,
+        depth: parseFloat(String(cp.effectCoverflowDepth)) || 100,
+        stretch: parseFloat(String(cp.effectCoverflowStretch)) || 0,
+        modifier: parseFloat(String(cp.effectCoverflowModifier)) || 1,
+        slideShadows: true,
+      }
+    }
+    if (effectName === 'flip') {
+      cfg.flipEffect = { slideShadows: Boolean(cp.effectFlipSlideShadows) }
+    }
+    if (effectName === 'cards') {
+      cfg.cardsEffect = {
+        perSlideOffset: parseFloat(String(cp.effectCardsPerSlideOffset)) || 8,
+        rotate: Boolean(cp.effectCardsRotate),
       }
     }
 
-    // Pagination
-    if (componentProps.pagination && !isEditing) {
-      config.pagination = {
-        clickable: true,
-        type: componentProps.paginationType as 'bullets' | 'fraction' | 'progressbar',
-        dynamicBullets: Boolean(componentProps.paginationDynamic),
-        dynamicMainBullets: 3,
-        renderBullet: function (index: number, className: string) {
-          return `<span class="${className} swiper-pagination-bullet-custom"></span>`
-        }
+    if (cp.navigation) {
+      cfg.navigation = {
+        nextEl: `.sc-nav-next-${cid}`,
+        prevEl: `.sc-nav-prev-${cid}`,
+        disabledClass: 'sc-nav-disabled',
       }
     }
 
-    // Autoplay - only with loop enabled
-    if (componentProps.autoplay && shouldEnableLoop && !isEditing) {
-      config.autoplay = {
-        delay: parseFloat(String(componentProps.autoplayDelay)) || 3000,
+    if (cp.pagination) {
+      cfg.pagination = {
+        el: `.sc-pg-${cid}`,
+        clickable: Boolean(cp.paginationClickable),
+        type: paginationType as any,
+        dynamicBullets: Boolean(cp.paginationDynamic && cp.paginationType === 'bullets'),
+      }
+
+      if (cp.paginationType === 'numbered') {
+        cfg.pagination.renderBullet = (index: number, className: string) =>
+          `<span class="${className}"><span>${index + 1}</span></span>`
+      }
+    }
+
+    if (canAutoplay) {
+      cfg.autoplay = {
+        delay: parseFloat(String(cp.autoplayDelay)) || 3000,
         disableOnInteraction: false,
         pauseOnMouseEnter: true,
-        stopOnLastSlide: false,
-        waitForTransition: true,
       }
     }
 
-    // Keyboard - only when not editing
-    if (!isEditing) {
-      config.keyboard = {
-        enabled: true,
-        onlyInViewport: true,
-        pageUpDown: true,
-      }
+    if (!isEditing && cp.keyboard) cfg.keyboard = { enabled: true, onlyInViewport: true }
+
+    if (cp.scrollbar && !isEditing) {
+      cfg.scrollbar = { el: `.sc-sb-${cid}`, draggable: true }
     }
 
-    // Scrollbar - only when not editing
-    if (componentProps.scrollbar && !isEditing) {
-      config.scrollbar = {
-        draggable: Boolean(componentProps.scrollbarDraggable),
-        snapOnRelease: Boolean(componentProps.scrollbarSnapOnRelease),
-        hide: false,
-        dragSize: 'auto'
-      }
-    }
+    return cfg
+  }, [cp, spv, canLoop, canAutoplay, isEditing, cid])
 
-    // Parallax
-    if (componentProps.parallax) {
-      config.parallax = true
-    }
+  const hoverIntensity = Math.min(1.2, Math.max(1, parseFloat(String(cp.hoverIntensity)) || 1.06))
+  const hoverLiftPx = Math.max(2, Math.round((hoverIntensity - 1) * 70))
+  const hoverBrightness = Math.min(1.35, 1 + (hoverIntensity - 1) * 2.5)
 
-    // Add effect-specific config
-    const effectConfig = getEffectConfig()
-    return { ...config, ...effectConfig }
-  }
-
-  // Manual navigation handlers
-  const goNext = () => {
-    if (swiperInstance) {
-      swiperInstance.slideNext()
-    }
-  }
-
-  const goPrev = () => {
-    if (swiperInstance) {
-      swiperInstance.slidePrev()
-    }
-  }
-
-  // Container style
-  const containerStyle = {
-    backgroundColor: componentProps.backgroundColor,
-    padding: componentProps.padding,
-    borderRadius: componentProps.borderRadius,
-    width: '100%',
-    maxWidth: '100%',
-    position: 'relative' as const,
-    overflow: 'visible',
-    boxSizing: 'border-box' as const,
-  }
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
-      style={containerStyle}
-      className={`swiper-container-wrapper`}
-      data-swiper-id={componentId}
+      className="sc-wrap"
+      data-swiper-id={cid}
       data-section-id={sectionId}
-      data-loop-enabled={shouldEnableLoop}
-      data-slides-count={currentSlides.length}
-      data-hover-effects={componentProps.hoverEffects}
-      data-hover-effect-type={componentProps.hoverEffectType}
-      data-hover-intensity={componentProps.hoverIntensity}>
-      
-      {/* Parallax Background */}
-      {componentProps.parallax && componentProps.parallaxBackground && (
-        <div
-          className="swiper-parallax absolute inset-0 z-0 bg-cover bg-center"
-          data-swiper-parallax="-30%"
-          style={{
-            backgroundImage: `url(${componentProps.parallaxBackground})`,
-          }}
-        />
+      data-ready-for-drop={isEditing ? 'true' : 'false'}
+      data-arrow-style={cp.arrowStyle || 'rounded'}
+      data-arrow-position={cp.arrowPosition || 'sides'}
+      data-dots-type={cp.paginationType || 'bullets'}
+      data-hover-enabled={!isEditing && cp.hoverEffects ? 'true' : 'false'}
+      data-hover-type={cp.hoverEffectType || 'none'}
+      style={{
+        backgroundColor: cp.backgroundColor,
+        borderRadius: cp.borderRadius,
+        width: cp.width || '100%',
+        ['--sc-hover-intensity' as any]: String(hoverIntensity),
+        ['--sc-hover-lift' as any]: `${hoverLiftPx}px`,
+        ['--sc-hover-brightness' as any]: String(hoverBrightness),
+      }}
+    >
+      {/* Toolbar */}
+      {isEditing && (
+        <div className="sc-toolbar">
+          <div className="sc-toolbar-info">
+            <span className="sc-toolbar-tag">Swiper</span>
+            <span className="sc-toolbar-meta">
+              {slides.length} slides · {spvNum} per view
+            </span>
+          </div>
+          <button className="sc-add-btn" onClick={addSlide}>
+            <Plus size={12} />
+            Add Slide
+          </button>
+        </div>
       )}
 
-      <div className="relative z-10">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 p-4 bg-white/90 backdrop-blur-sm rounded-lg border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Settings className="text-blue-600" size={20} />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-800">Swiper Carousel</h3>
-              <div className="flex flex-wrap items-center gap-2 mt-1">
-                <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                  {componentProps.effect} effect
-                </span>
-                <span className="text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                  {currentSlides.length} slide{currentSlides.length !== 1 ? 's' : ''}
-                </span>
-                {componentProps.hoverEffects && componentProps.hoverEffectType !== 'none' && (
-                  <span className="text-sm bg-gradient-to-r from-blue-100 to-purple-100 text-blue-800 px-2 py-1 rounded">
-                    🎯 {componentProps.hoverEffectType} hover ({componentProps.hoverIntensity})
-                  </span>
-                )}
-                {!componentProps.hoverEffects && (
-                  <span className="text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                    🔴 Hover Effects: Off
-                  </span>
-                )}
-                {componentProps.autoplay && shouldEnableLoop && (
-                  <span className={`text-sm px-2 py-1 rounded ${autoPlayActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                    {autoPlayActive ? '▶️ Auto-play' : '⏸️ Paused'}
-                  </span>
-                )}
-                {componentProps.loop && !shouldEnableLoop && (
-                  <span className="text-sm bg-yellow-100 text-yellow-800 px-2 py-1 rounded flex items-center gap-1">
-                    <AlertCircle size={12} />
-                    Need {getSlidesPerView() === 1 ? '3' : `${getSlidesPerView()}+`} slides for loop
-                  </span>
-                )}
-                {shouldEnableLoop && (
-                  <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded">
-                    🔄 Infinite Loop Active
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {componentProps.autoplay && shouldEnableLoop && !isEditing && (
-              <button
-                onClick={toggleAutoPlay}
-                className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                  autoPlayActive ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                }`}
-                title={autoPlayActive ? 'Pause Autoplay' : 'Play Autoplay'}>
-                {autoPlayActive ? <Pause size={16} /> : <Play size={16} />}
-                {autoPlayActive ? 'Pause' : 'Play'}
-              </button>
-            )}
-            {isEditing && (
-              <button
-                onClick={handleAddSlide}
-                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 flex items-center gap-2 transition-all shadow-md hover:shadow-lg"
-                title="Add New Slide">
-                <Plus size={18} />
-                Add Slide
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Main Swiper Container */}
-        <div className="relative">
-          {/* Manual navigation buttons */}
-          {componentProps.navigation && (
-            <>
-              <button
-                onClick={goPrev}
-                className="swiper-button-prev-custom absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-300 rounded-full w-10 h-10 flex items-center justify-center shadow-lg hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                disabled={!shouldEnableLoop && swiperInstance?.isBeginning}
-                title="Previous slide">
-                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              
-              <button
-                onClick={goNext}
-                className="swiper-button-next-custom absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-white border border-gray-300 rounded-full w-10 h-10 flex items-center justify-center shadow-lg hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                disabled={!shouldEnableLoop && swiperInstance?.isEnd}
-                title="Next slide">
-                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </>
-          )}
-
+      {/* Swiper + nav */}
+      {slides.length > 0 ? (
+        <div className="sc-swiper-wrap">
           <Swiper
-            {...getSwiperConfig()}
-            onSwiper={(swiper: SwiperType) => {
-              setSwiperInstance(swiper)
-            }}
-            className={`swiper-editor ${isEditing ? 'swiper-editing' : 'swiper-preview'}`}
-            style={{
-              '--swiper-navigation-color': '#3b82f6',
-              '--swiper-pagination-color': '#3b82f6',
-              '--swiper-pagination-bullet-size': '8px',
-              '--swiper-pagination-bullet-inactive-color': '#d1d5db',
-              '--swiper-pagination-bullet-inactive-opacity': '1',
-              '--swiper-navigation-size': '24px',
-              paddingLeft: componentProps.navigation ? '40px' : '0',
-              paddingRight: componentProps.navigation ? '40px' : '0',
-            } as React.CSSProperties}>
-            
-            {currentSlides.map((slide: SlideType, index: number) => (
-              <SwiperSlide key={slide.id} className="!h-auto !flex items-stretch">
+            {...swiperCfg}
+            onSwiper={(s) => { setSwiper(s); setActiveIdx(s.activeIndex || 0) }}
+            onSlideChange={(s) => setActiveIdx(s.activeIndex)}
+            className={`sc-swiper ${spv === 'auto' ? 'sc-swiper--auto' : ''}`}
+          >
+            {slides.map((slide, i) => (
+              <SwiperSlide key={slide.id} className="sc-swiper-slide">
                 <Slide
                   slide={slide}
-                  slideIndex={index}
-                  swiperId={componentId}
+                  slideIndex={i}
+                  swiperId={cid}
                   sectionId={sectionId}
-                  containerId={containerId || componentId}
-                  onDeleteSlide={handleDeleteSlide}
+                  containerId={containerId || cid}
+                  totalSlides={slides.length}
+                  onDeleteSlide={delSlide}
                   onComponentSelect={onComponentSelect}
                   onComponentUpdate={onComponentUpdate}
-                  deleteComponent={deleteComponent}
-                  onSlideUpdate={handleSlideUpdate}
+                  onSlideUpdate={updateSlide}
                   isEditing={isEditing}
-                  slideMinHeight={componentProps.slideMinHeight}
-                  hoverEffects={componentProps.hoverEffects}
-                  hoverEffectType={componentProps.hoverEffectType}
-                  hoverIntensity={componentProps.hoverIntensity}
+                  slideMinHeight={cp.slideMinHeight}
                 />
               </SwiperSlide>
             ))}
           </Swiper>
 
-          {/* Swiper's default navigation (still works) */}
-          {componentProps.navigation && (
+          {/* Custom arrows */}
+          {cp.navigation && (
             <>
-              <div className="swiper-button-next !hidden md:!flex" />
-              <div className="swiper-button-prev !hidden md:!flex" />
+              <button className={`sc-nav sc-nav-prev sc-nav-prev-${cid}`}>
+                <ChevronLeft size={15} strokeWidth={2} />
+              </button>
+              <button className={`sc-nav sc-nav-next sc-nav-next-${cid}`}>
+                <ChevronRight size={15} strokeWidth={2} />
+              </button>
             </>
           )}
         </div>
-
-        {/* Swiper 12 pagination container */}
-        {componentProps.pagination && !isEditing && (
-          <div className="swiper-pagination !bottom-0 !relative mt-4" />
-        )}
-
-        {/* Slide counter and pagination */}
-        <div className="mt-4 flex items-center justify-between px-2">
-          <div className="text-sm text-gray-600">
-            Slide {swiperInstance ? swiperInstance.activeIndex + 1 : 1} of {currentSlides.length}
-          </div>
-          
-          {/* Custom pagination dots for better visibility */}
-          {currentSlides.length > 0 && (
-            <div className="flex items-center gap-1">
-              {currentSlides.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => swiperInstance?.slideTo(index)}
-                  className={`w-2 h-2 rounded-full transition-all ${
-                    swiperInstance?.activeIndex === index 
-                      ? 'bg-blue-600 w-6' 
-                      : 'bg-gray-300 hover:bg-gray-400'
-                  }`}
-                  title={`Go to slide ${index + 1}`}
-                />
-              ))}
-            </div>
-          )}
+      ) : (
+        /* Zero slides */
+        <div className="sc-zero">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="sc-zero-icon">
+            <rect x="2" y="7" width="20" height="13" rx="2"/>
+            <path d="M16 7V5a2 2 0 00-4 0v2"/>
+          </svg>
+          <p className="sc-zero-title">No Slides</p>
+          <p className="sc-zero-sub">Add slides to build the carousel</p>
+          <button className="sc-add-btn" onClick={addSlide}>
+            <Plus size={13} /> Create First Slide
+          </button>
         </div>
+      )}
 
-        {/* Empty State */}
-        {currentSlides.length === 0 && (
-          <div className="min-h-[400px] border-3 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-gray-50 to-gray-100">
-            <div className="text-6xl mb-6 text-gray-400">🔄</div>
-            <h3 className="text-2xl font-semibold text-gray-700 mb-3">No Slides Yet</h3>
-            <p className="text-gray-500 mb-8 max-w-md text-lg">
-              Start by adding slides to create an interactive carousel with {componentProps.effect} effect.
-            </p>
-            <button
-              onClick={handleAddSlide}
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 flex items-center gap-3 text-lg font-medium shadow-lg hover:shadow-xl transition-all">
-              <Plus size={24} />
-              Create First Slide
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Pagination */}
+      {cp.pagination && (
+        <div className={`sc-pg sc-pg-${cid}`} />
+      )}
 
-      {/* Global CSS */}
+      {/* Scrollbar — preview only */}
+      {cp.scrollbar && !isEditing && (
+        <div className={`sc-sb sc-sb-${cid}`} />
+      )}
+
+      {/* ── Global styles ── */}
       <style jsx global>{`
-        /* ===== SWIPER CONTAINER BASE STYLES ===== */
-        .swiper-container-wrapper {
+
+        /* ── Tokens ── */
+        .sc-wrap {
+          --sc-bg:        #0d0f14;
+          --sc-surface:   #13161e;
+          --sc-surface2:  #1a1d28;
+          --sc-surface3:  #22263a;
+          --sc-border:    rgba(255,255,255,0.07);
+          --sc-border2:   rgba(255,255,255,0.13);
+          --sc-accent:    #7c6dfa;
+          --sc-accent2:   #a594ff;
+          --sc-accentbg:  rgba(124,109,250,0.12);
+          --sc-green:     #3ecf8e;
+          --sc-red:       #f87171;
+          --sc-yellow:    #fbbf24;
+          --sc-text:      #e8eaf0;
+          --sc-text2:     #8b90a8;
+          --sc-text3:     #5a5f7a;
+          font-family: 'DM Sans', system-ui, sans-serif;
           position: relative;
-          overflow: visible !important;
+          background-image: radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px);
+          background-size: 20px 20px;
         }
-        
-        /* ===== EDITOR MODE STYLES ===== */
-        .swiper-editor.swiper-editing .swiper-wrapper {
-          overflow: visible !important;
-        }
-        
-        .swiper-editor.swiper-editing .swiper-slide {
-          opacity: 1 !important;
-          transform: none !important;
-          transition: none !important;
-          filter: none !important;
-        }
-        
-        .swiper-editor .swiper-slide {
-          height: auto;
+
+        /* ── Toolbar ── */
+        .sc-toolbar {
           display: flex;
-          align-items: stretch;
-          box-sizing: border-box;
-          transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), 
-                      opacity 0.5s ease,
-                      box-shadow 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 0 10px;
         }
-        
-        /* ===== HOVER EFFECTS ===== */
-        
-        /* Hover effects only apply when enabled and not in edit mode */
-        .swiper-editor:not(.swiper-editing) .swiper-slide:hover {
-          transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), 
-                      box-shadow 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
-                      opacity 0.3s ease !important;
+        .sc-toolbar-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
-        
-        /* Lift hover effect */
-        .swiper-editor[data-hover-effects="true"][data-hover-effect-type="lift"] .swiper-slide:not(.swiper-editing):hover {
-          transform: translateY(-8px) scale(1.03) !important;
-          z-index: 50 !important;
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15),
-                      0 10px 20px rgba(0, 0, 0, 0.1) !important;
+        .sc-toolbar-tag {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--sc-text3);
         }
-        
-        /* Scale hover effect */
-        .swiper-editor[data-hover-effects="true"][data-hover-effect-type="scale"] .swiper-slide:not(.swiper-editing):hover {
-          transform: scale(1.03) !important;
-          z-index: 50 !important;
+        .sc-toolbar-meta {
+          font-size: 11px;
+          color: var(--sc-text3);
+          font-family: 'DM Mono', monospace;
         }
-        
-        /* Glow hover effect */
-        .swiper-editor[data-hover-effects="true"][data-hover-effect-type="glow"] .swiper-slide:not(.swiper-editing):hover {
-          transform: translateY(-4px) !important;
-          z-index: 50 !important;
-          box-shadow: 0 0 25px rgba(59, 130, 246, 0.3),
-                      0 15px 35px rgba(0, 0, 0, 0.15) !important;
-          border-color: #3b82f6 !important;
+        .sc-add-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 5px 13px;
+          border-radius: 20px;
+          border: 1px solid rgba(124,109,250,0.3);
+          background: rgba(124,109,250,0.1);
+          color: var(--sc-accent2);
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background 0.15s;
+          font-family: 'DM Sans', system-ui, sans-serif;
         }
-        
-        /* Minimal hover effect */
-        .swiper-editor[data-hover-effects="true"][data-hover-effect-type="minimal"] .swiper-slide:not(.swiper-editing):hover {
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1) !important;
-          z-index: 50 !important;
+        .sc-add-btn:hover { background: rgba(124,109,250,0.18); }
+
+        /* ── Swiper outer ── */
+        .sc-swiper-wrap {
+          position: relative;
+          width: 100%;
         }
-        
-        /* Intensity variations */
-        .swiper-editor[data-hover-effects="true"][data-hover-intensity="light"] .swiper-slide:not(.swiper-editing):hover {
-          transform: translateY(-4px) scale(1.02) !important;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+        .sc-swiper {
+          overflow: hidden !important;   /* FIXED: was visible — causing scroll issues */
         }
-        
-        .swiper-editor[data-hover-effects="true"][data-hover-intensity="strong"] .swiper-slide:not(.swiper-editing):hover {
-          transform: translateY(-12px) scale(1.04) !important;
-          box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2) !important;
+        .sc-swiper--auto .sc-swiper-slide {
+          width: 200px !important;
         }
-        
-        /* Tilt effect needs special handling - done inline in component */
-        
-        /* Disabled hover effects */
-        .swiper-editor[data-hover-effects="false"] .swiper-slide:not(.swiper-editing):hover,
-        .swiper-editor[data-hover-effect-type="none"] .swiper-slide:not(.swiper-editing):hover {
-          transform: none !important;
-          box-shadow: none !important;
-          z-index: auto !important;
-        }
-        
-        /* ===== PARTIAL VISIBILITY SLIDES ===== */
-        .swiper-slide {
-          visibility: visible !important;
-        }
-        
-        .swiper-slide:not(.swiper-slide-visible):not(:hover) {
-          opacity: 0.4 !important;
-        }
-        
-        /* When non-visible slide is hovered */
-        .swiper-slide:not(.swiper-slide-visible):hover {
-          opacity: 1 !important;
-          filter: none !important;
-        }
-        
-        /* ===== NAVIGATION BUTTONS ===== */
-        .swiper-button-prev-custom,
-        .swiper-button-next-custom {
-          opacity: 1 !important;
-          visibility: visible !important;
-        }
-        
-        .swiper-editing .swiper-button-prev-custom,
-        .swiper-editing .swiper-button-next-custom {
+        .sc-swiper-slide {
+          height: auto !important;
           display: flex !important;
+          align-items: stretch !important;
+          box-sizing: border-box;
+          transition: opacity 0.25s;
         }
-        
-        /* Swiper default navigation buttons */
-        .swiper-button-next,
-        .swiper-button-prev {
-          background-color: rgba(255, 255, 255, 0.9);
-          border: 1px solid #e5e7eb;
-          border-radius: 50%;
-          width: 40px;
-          height: 40px;
-          display: none;
+
+        /* Non-visible slides: subtle dim */
+        .sc-swiper-slide:not(.swiper-slide-visible) {
+          opacity: 0.4;
+        }
+        .sc-swiper-slide:hover { opacity: 1 !important; }
+
+        /* ── Slide root ── */
+        .sc-slide-root {
+          width: 100%;
+          height: 100%;
+          display: flex;
+        }
+
+        /* ── Card — THE single visible box ───────────────────────────────── */
+        /*
+          Key design decisions:
+          1. border-radius: 10px — matches HTML preview carousel
+          2. overflow: hidden — clips content cleanly
+          3. NO inner wrapper box — one box only
+          4. height controlled by minHeight, not auto-growing
+        */
+        .sc-card {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          min-height: 120px;
+          border-radius: 10px;
+          border: 1px solid var(--sc-border2);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+          transition: border-color 0.2s;
+          background: var(--sc-surface2);
+        }
+        .sc-card--over {
+          border-color: rgba(124,109,250,0.5) !important;
+          box-shadow: 0 0 0 2px rgba(124,109,250,0.1);
+        }
+        .sc-card--clone {
+          border-style: dashed;
+          border-color: rgba(251,191,36,0.35);
+        }
+        .sc-wrap[data-hover-enabled='true'] .sc-card {
+          transition:
+            transform 0.22s ease,
+            box-shadow 0.22s ease,
+            filter 0.22s ease,
+            opacity 0.22s ease,
+            border-color 0.22s ease;
+          transform-origin: center;
+          will-change: transform, opacity, filter;
+        }
+        .sc-wrap[data-hover-enabled='true'][data-hover-type='zoom'] .sc-swiper-slide:hover .sc-card {
+          transform: scale(var(--sc-hover-intensity));
+          z-index: 3;
+        }
+        .sc-wrap[data-hover-enabled='true'][data-hover-type='lift'] .sc-swiper-slide:hover .sc-card {
+          transform: translateY(calc(var(--sc-hover-lift) * -1));
+          box-shadow: 0 10px 24px rgba(0,0,0,0.28);
+          z-index: 3;
+        }
+        .sc-wrap[data-hover-enabled='true'][data-hover-type='dim'] .sc-swiper-slide:hover .sc-card {
+          opacity: 0.65;
+        }
+        .sc-wrap[data-hover-enabled='true'][data-hover-type='brighten'] .sc-swiper-slide:hover .sc-card {
+          filter: brightness(var(--sc-hover-brightness));
+          border-color: rgba(124,109,250,0.42);
+        }
+        .sc-wrap[data-hover-enabled='true'][data-hover-type='glow'] .sc-swiper-slide:hover .sc-card {
+          border-color: rgba(124,109,250,0.5);
+          box-shadow: 0 0 16px rgba(124,109,250,0.35);
+        }
+
+        /* Drop ring */
+        .sc-drop-ring {
+          position: absolute;
+          inset: 0;
+          border-radius: 10px;
+          border: 1.5px solid var(--sc-accent);
+          pointer-events: none;
+          z-index: 30;
+          animation: sc-pulse 1.2s ease-in-out infinite;
+        }
+        @keyframes sc-pulse {
+          0%,100% { opacity:.6 } 50% { opacity:.2 }
+        }
+
+        /* Overlay */
+        .sc-overlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        /* ── Micro bar ── */
+        /*
+          Replaces the heavy "CONTENT Slide 7 | trash" bar.
+          Now: just a translucent 28px strip at top-right corner.
+          Slide number + delete. Nothing else.
+        */
+        .sc-bar {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          left: auto;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          z-index: 10;
+          pointer-events: none;
+          justify-content: flex-end;
+        }
+        .sc-bar > * { pointer-events: auto; }
+        .sc-bar-num {
+          font-size: 10px;
+          font-weight: 600;
+          color: rgba(255,255,255,0.3);
+          font-family: 'DM Mono', monospace;
+          background: rgba(13,15,20,0.5);
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+        .sc-bar-of {
+          color: rgba(255,255,255,0.15);
+          font-weight: 400;
+        }
+        .sc-chip {
+          font-size: 9px;
+          font-weight: 600;
+          padding: 1px 6px;
+          border-radius: 20px;
+          letter-spacing: 0.04em;
+        }
+        .sc-chip--y { background: rgba(251,191,36,0.15); color: var(--sc-yellow); }
+        .sc-chip--p { background: var(--sc-accentbg); color: var(--sc-accent2); }
+        .sc-del {
+          width: 22px;
+          height: 22px;
+          border-radius: 6px;
+          border: 1px solid rgba(248,113,113,0.2);
+          background: rgba(248,113,113,0.08);
+          color: rgba(248,113,113,0.6);
+          display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-          transition: all 0.2s;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s;
+          padding: 0;
         }
-        
-        @media (min-width: 768px) {
-          .swiper-button-next,
-          .swiper-button-prev {
-            display: flex;
-          }
-          
-          .swiper-button-prev-custom,
-          .swiper-button-next-custom {
-            display: none;
-          }
+        .sc-del:hover {
+          background: rgba(248,113,113,0.18);
+          color: var(--sc-red);
         }
-        
-        .swiper-button-next:after,
-        .swiper-button-prev:after {
-          font-size: 16px;
-          color: #374151;
-          font-weight: bold;
+
+        /* ── Quick content ── */
+        .sc-quickcontent {
+          margin-bottom: 10px;
+          position: relative;
+          z-index: 2;
+          flex-shrink: 0;
+          padding-top: 30px; /* make room for floating sc-bar */
         }
-        
-        .swiper-button-next:hover,
-        .swiper-button-prev:hover {
-          background-color: white;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        .sc-qt { font-size: 12px; font-weight: 600; color: var(--sc-text); margin: 0 0 2px; }
+        .sc-qs { font-size: 10.5px; color: var(--sc-text3); font-family: 'DM Mono', monospace; margin: 0; }
+
+        /* ── Body ── */
+        .sc-body {
+          flex: 1;
+          position: relative;
+          z-index: 2;
+          min-height: 0;
+          overflow: hidden;          /* no inner scroll — slide clips naturally */
+          display: flex;
+          flex-direction: column;
         }
-        
-        .swiper-button-disabled {
-          opacity: 0.35;
-          cursor: not-allowed;
-          pointer-events: none;
+        .sc-body--editing {
+          padding-top: 34px;
         }
-        
-        /* ===== PAGINATION STYLING ===== */
-        .swiper-pagination-bullet {
-          width: 8px;
-          height: 8px;
-          background: #d1d5db;
+        /* Only show scroll if components make it taller */
+        .sc-body:has(.sc-comps) {
+          overflow-y: auto;
+        }
+        .sc-body::-webkit-scrollbar { width: 3px; }
+        .sc-body::-webkit-scrollbar-track { background: transparent; }
+        .sc-body::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.08);
+          border-radius: 2px;
+        }
+
+        /* ── Components ── */
+        .sc-comps { display: flex; flex-direction: column; gap: 10px; }
+
+        .sc-child {
+          border-radius: 6px;
+          border: 1px solid transparent;
+          transition: border-color 0.15s;
+        }
+        .sc-child:hover { border-color: rgba(124,109,250,0.25); }
+
+        .sc-child-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 3px 7px 3px;
+          border-bottom: 1px dashed rgba(255,255,255,0.05);
+          margin-bottom: 3px;
+        }
+        .sc-child-type {
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          color: var(--sc-text3);
+        }
+        .sc-child-actions { display: flex; gap: 3px; }
+        .sc-cbtn {
+          font-size: 9.5px;
+          padding: 1px 6px;
+          border-radius: 5px;
+          border: 1px solid rgba(124,109,250,0.2);
+          background: rgba(124,109,250,0.07);
+          color: var(--sc-accent2);
+          cursor: pointer;
+          font-family: 'DM Sans', system-ui, sans-serif;
+        }
+        .sc-cbtn--del {
+          border-color: rgba(248,113,113,0.2);
+          background: rgba(248,113,113,0.07);
+          color: var(--sc-red);
+        }
+
+        .sc-comp { width: 100%; overflow: hidden; }
+
+        /* ── Empty state — matches component preview carousel ── */
+        .sc-empty-preview {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          flex: 1;
+          gap: 6px;
+          min-height: 96px;
+          text-align: center;
+          transition: transform 0.2s;
+        }
+        .sc-empty-preview--over {
+          transform: scale(1.02);
+        }
+        .sc-preview-num {
+          font-size: 24px;
+          font-weight: 700;
+          opacity: 0.15;
+          color: #ffffff;
+          line-height: 1;
+          font-family: 'DM Mono', monospace;
+        }
+        .sc-preview-label {
+          font-size: 11px;
+          color: var(--sc-text2);
+          margin: 0;
+        }
+        .sc-drop-hint {
+          font-size: 10px;
+          color: rgba(255,255,255,0.28);
+          border: 1px dashed rgba(255,255,255,0.18);
+          border-radius: 999px;
+          padding: 2px 8px;
+        }
+
+        /* ── Unknown component ── */
+        .sc-unknown {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 4px;
+          padding: 12px;
+          border: 1px dashed rgba(255,255,255,0.08);
+          border-radius: 6px;
+          font-size: 10px;
+          color: var(--sc-text3);
+        }
+
+        /* ── Custom nav arrows — variants + positions ── */
+        .sc-nav {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 20;
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          background: var(--sc-surface);
+          border: 1px solid var(--sc-border2);
+          color: var(--sc-text2);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, opacity 0.15s;
+          padding: 0;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        }
+        .sc-nav:hover {
+          background: var(--sc-surface2);
+          color: var(--sc-accent2);
+        }
+        .sc-nav-prev { left: 4px; }
+        .sc-nav-next { right: 4px; }
+        .sc-nav-disabled { opacity: 0.2; pointer-events: none; cursor: default; }
+        .sc-wrap[data-arrow-style='square'] .sc-nav {
+          border-radius: 6px;
+          width: 32px;
+          height: 32px;
+        }
+        .sc-wrap[data-arrow-style='minimal'] .sc-nav {
+          background: transparent;
+          border: none;
+          box-shadow: none;
+          width: 26px;
+          height: 26px;
+          color: var(--sc-text3);
+        }
+        .sc-wrap[data-arrow-style='minimal'] .sc-nav:hover {
+          color: var(--sc-accent2);
+          background: transparent;
+        }
+        .sc-wrap[data-arrow-position='bottom'] .sc-swiper-wrap {
+          padding-bottom: 44px;
+        }
+        .sc-wrap[data-arrow-position='bottom'] .sc-nav {
+          top: auto;
+          bottom: 6px;
+          transform: none;
+        }
+        .sc-wrap[data-arrow-position='bottom'] .sc-nav-prev {
+          left: calc(50% - 40px);
+          right: auto;
+        }
+        .sc-wrap[data-arrow-position='bottom'] .sc-nav-next {
+          left: calc(50% + 8px);
+          right: auto;
+        }
+        .sc-wrap[data-arrow-position='top-right'] .sc-swiper-wrap {
+          padding-top: 44px;
+        }
+        .sc-wrap[data-arrow-position='top-right'] .sc-nav {
+          top: 6px;
+          transform: none;
+        }
+        .sc-wrap[data-arrow-position='top-right'] .sc-nav-next {
+          right: 6px;
+          left: auto;
+        }
+        .sc-wrap[data-arrow-position='top-right'] .sc-nav-prev {
+          right: 44px;
+          left: auto;
+        }
+
+        /* ── Pagination ── */
+        .sc-pg {
+          display: flex;
+          justify-content: center;
+          gap: 5px;
+          margin-top: 10px;
+          height: 16px;
+          align-items: center;
+        }
+        .sc-pg .swiper-pagination-bullet {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--sc-surface3);
           opacity: 1;
+          transition: width 0.2s, border-radius 0.2s, background 0.2s;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
-        
-        .swiper-pagination-bullet-active {
-          background: #3b82f6;
-          transform: scale(1.2);
+        .sc-pg .swiper-pagination-bullet-active {
+          background: var(--sc-accent);
+          width: 16px;
+          border-radius: 3px;
         }
-        
-        /* ===== EDITOR MODE SPECIFIC ===== */
-        .swiper-editing {
-          cursor: default !important;
+        .sc-wrap[data-dots-type='lines'] .sc-pg .swiper-pagination-bullet {
+          width: 20px;
+          height: 3px;
+          border-radius: 2px;
         }
-        
-        .swiper-editing .swiper-slide {
-          cursor: default !important;
+        .sc-wrap[data-dots-type='lines'] .sc-pg .swiper-pagination-bullet-active {
+          width: 20px;
+          border-radius: 2px;
         }
-        
-        /* Disable hover effects in editor mode */
-        .swiper-editing .swiper-slide:hover {
-          transform: none !important;
-          box-shadow: none !important;
-          z-index: auto !important;
+        .sc-wrap[data-dots-type='numbered'] .sc-pg .swiper-pagination-bullet {
+          width: 16px;
+          height: 16px;
+          border-radius: 999px;
+          border: 1px solid var(--sc-border);
+          background: transparent;
+          color: var(--sc-text3);
         }
-        
-        /* ===== TOUCH DEVICE OPTIMIZATION ===== */
-        @media (hover: none) and (pointer: coarse) {
-          .swiper-editor .swiper-slide:not(.swiper-editing):hover {
-            transform: none !important;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
-          }
+        .sc-wrap[data-dots-type='numbered'] .sc-pg .swiper-pagination-bullet span {
+          font-size: 8px;
+          line-height: 1;
+          font-family: 'DM Mono', monospace;
         }
-        
-        /* ===== DARK MODE SUPPORT ===== */
-        @media (prefers-color-scheme: dark) {
-          .swiper-button-next,
-          .swiper-button-prev {
-            background-color: rgba(30, 41, 59, 0.9);
-            border-color: rgba(59, 130, 246, 0.3); 
-          }
-          
-          .swiper-button-next:after,
-          .swiper-button-prev:after {
-            color: #e5e7eb;
-          }
-          
-          .swiper-pagination-bullet {
-            background: #475569;
-          }
-          
-          .swiper-pagination-bullet-active {
-            background: #3b82f6;
-          }
+        .sc-wrap[data-dots-type='numbered'] .sc-pg .swiper-pagination-bullet-active {
+          width: 16px;
+          background: var(--sc-accentbg);
+          border: 1px solid rgba(124,109,250,0.45);
+          color: var(--sc-accent2);
+          border-radius: 999px;
         }
+        .sc-pg .swiper-pagination-fraction {
+          font-size: 11px;
+          color: var(--sc-text2);
+          font-family: 'DM Mono', monospace;
+        }
+        .sc-pg.swiper-pagination-progressbar {
+          width: 100%;
+          height: 3px;
+          background: var(--sc-surface3);
+          border-radius: 2px;
+          margin-top: 10px;
+        }
+        .sc-pg .swiper-pagination-progressbar-fill {
+          background: var(--sc-accent);
+          border-radius: 2px;
+        }
+
+        /* ── Scrollbar ── */
+        .sc-sb {
+          margin-top: 6px;
+          height: 3px;
+          background: var(--sc-surface3);
+          border-radius: 2px;
+        }
+        .sc-sb .swiper-scrollbar-drag {
+          background: var(--sc-accent);
+          border-radius: 2px;
+        }
+
+        /* ── Zero state ── */
+        .sc-zero {
+          min-height: 220px;
+          border: 1.5px dashed rgba(255,255,255,0.07);
+          border-radius: 10px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          padding: 32px;
+          text-align: center;
+        }
+        .sc-zero-icon { color: rgba(255,255,255,0.15); margin-bottom: 2px; }
+        .sc-zero-title { font-size: 14px; font-weight: 600; color: var(--sc-text2); margin: 0; }
+        .sc-zero-sub { font-size: 12px; color: var(--sc-text3); margin: 0 0 6px; }
+
+        /* ── Slide typography ── */
+        .sc-body h1 { font-size: 28px; font-weight: 700; color: #e8eaf0; line-height: 1.2; margin: 0 0 6px; }
+        .sc-body h2 { font-size: 20px; font-weight: 700; color: #e8eaf0; line-height: 1.25; margin: 0 0 5px; }
+        .sc-body h3 { font-size: 15px; font-weight: 600; color: #8b90a8; line-height: 1.35; margin: 0 0 4px; }
+        .sc-body p  { font-size: 13px; line-height: 1.7; color: #8b90a8; margin: 0 0 8px; }
+        .sc-body p.lead  { font-size: 14px; color: #e8eaf0; }
+        .sc-body p.small { font-size: 11px; color: #5a5f7a; font-style: italic; }
+
+        /* Hide Swiper's built-in nav (we use custom) */
+        .sc-swiper .swiper-button-next,
+        .sc-swiper .swiper-button-prev { display: none !important; }
       `}</style>
     </div>
   )
 }
 
 ;(SwiperContainer as any).schema = swiperContainerSchema
-
 export default SwiperContainer

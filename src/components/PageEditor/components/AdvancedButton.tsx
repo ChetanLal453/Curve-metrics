@@ -1,7 +1,7 @@
 // src/components/PageEditor/components/AdvancedButton.tsx
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 
 // ==================== TYPES ====================
 export interface AdvancedButtonProps {
@@ -511,9 +511,20 @@ export const advancedButtonSchema = {
 }
 
 // ==================== BUTTON COMPONENT ====================
-const AdvancedButton: React.FC<AdvancedButtonProps> = (props) => {
-  const { onUpdate, onComponentUpdate, componentId, onSelect, ...buttonProps } = props
+const AdvancedButton: React.FC<Partial<AdvancedButtonProps>> = (props) => {
+  const mergedProps: AdvancedButtonProps = {
+    ...advancedButtonDefaultProps,
+    ...props,
+  }
+  const { onUpdate, onComponentUpdate, componentId, onSelect, ...buttonProps } = mergedProps
   const [isHovered, setIsHovered] = useState(false)
+  const [isEditor, setIsEditor] = useState(false)
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      setIsEditor(Boolean(document.querySelector('.cm-page-editor')))
+    }
+  }, [])
 
   // ✅ NEW: Function to create gradient string
   const getGradientString = useCallback((): string => {
@@ -733,9 +744,139 @@ const AdvancedButton: React.FC<AdvancedButtonProps> = (props) => {
     e.stopPropagation()
     onSelect?.()
   }
+  const animationStyles = `
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-5px); }
+    }
+    
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .advanced-button-pulse {
+      animation: pulse ${buttonProps.animationDuration || '1s'} infinite;
+    }
+    
+    .advanced-button-bounce {
+      animation: bounce ${buttonProps.animationDuration || '0.5s'} infinite;
+    }
+    
+    .advanced-button-fade-in {
+      animation: fade-in ${buttonProps.animationDuration || '0.3s'} ease-in;
+    }
+  `
 
-  // ✅ NEW: Preview mode indicator
-  const isGradientPreview = buttonProps.useGradient && buttonProps.variant === 'primary'
+  if (isEditor) {
+    const previewCardStyle: React.CSSProperties = {
+      width: '100%',
+      borderRadius: '12px',
+      border: '1px solid var(--canvas-border, rgba(255,255,255,0.07))',
+      overflow: 'hidden',
+      background: 'var(--canvas-surface, #13161e)',
+    }
+
+    const previewHeaderStyle: React.CSSProperties = {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '12px 16px',
+      background: 'var(--canvas-surface2, #1a1d28)',
+      borderBottom: '1px solid var(--canvas-border, rgba(255,255,255,0.07))',
+      fontFamily: "'DM Sans', system-ui, sans-serif",
+    }
+
+    const previewBodyStyle: React.CSSProperties = {
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: buttonProps.alignment === 'center' ? 'center' : buttonProps.alignment === 'right' ? 'flex-end' : 'flex-start',
+      padding: '28px 36px',
+      backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)',
+      backgroundSize: '20px 20px',
+    }
+
+    const staticPreviewButtonStyle: React.CSSProperties = {
+      ...getButtonStyles(),
+      padding: '10px 22px',
+      borderRadius: '8px',
+      fontSize: '14px',
+      fontWeight: 600,
+      fontFamily: "'DM Sans', sans-serif",
+      cursor: 'default',
+      transform: 'none',
+    }
+
+    const previewSubtitle = `${buttonProps.variant || 'primary'} variant`
+
+    return (
+      <div style={containerStyles} className={buttonProps.customClass || ''} onClick={handleClick}>
+        <div style={previewCardStyle}>
+          <div style={previewHeaderStyle}>
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--canvas-accent2, #a594ff)',
+                background: 'var(--canvas-accentbg, rgba(124,109,250,0.12))',
+                border: '1px solid rgba(124,109,250,0.2)',
+                padding: '2px 8px',
+                borderRadius: '20px',
+              }}>
+              Interactive
+            </span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--canvas-text, #e8eaf0)' }}>Button</span>
+            <span style={{ marginLeft: 'auto', fontSize: '11.5px', color: 'var(--canvas-text3, #5a5f7a)', fontFamily: "'DM Mono', monospace" }}>
+              {previewSubtitle}
+            </span>
+          </div>
+
+          <div style={previewBodyStyle}>
+            {buttonProps.link && !buttonProps.disabled ? (
+              <a
+                href={buttonProps.link}
+                target={buttonProps.openInNewTab ? '_blank' : '_self'}
+                rel={buttonProps.openInNewTab ? 'noopener noreferrer' : undefined}
+                style={staticPreviewButtonStyle}
+                id={buttonProps.customId || undefined}
+                aria-label={buttonProps.ariaLabel || undefined}
+                data-tracking={buttonProps.dataTracking || undefined}
+                onClick={(e) => {
+                  e.preventDefault()
+                  handleClick(e)
+                }}>
+                {buttonContent}
+              </a>
+            ) : (
+              <button
+                style={staticPreviewButtonStyle}
+                disabled={buttonProps.disabled}
+                id={buttonProps.customId || undefined}
+                aria-label={buttonProps.ariaLabel || undefined}
+                data-tracking={buttonProps.dataTracking || undefined}
+                onClick={handleClick}>
+                {buttonContent}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <style>{animationStyles}</style>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -743,22 +884,6 @@ const AdvancedButton: React.FC<AdvancedButtonProps> = (props) => {
       className={buttonProps.customClass || ''}
       onClick={handleClick}
     >
-      {isGradientPreview && process.env.NODE_ENV === 'development' && (
-        <div style={{
-          position: 'absolute',
-          top: '-20px',
-          left: '0',
-          fontSize: '10px',
-          color: '#666',
-          background: '#f0f0f0',
-          padding: '2px 4px',
-          borderRadius: '3px',
-          zIndex: 1000,
-        }}>
-          🎨 Gradient Active
-        </div>
-      )}
-      
       {buttonProps.link && !buttonProps.disabled ? (
         <a
           href={buttonProps.link}
@@ -787,46 +912,12 @@ const AdvancedButton: React.FC<AdvancedButtonProps> = (props) => {
         </button>
       )}
       
-      {/* ✅ NEW: Animation styles */}
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.7; }
-        }
-        
-        @keyframes bounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
-        }
-        
-        @keyframes fade-in {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        
-        .advanced-button-pulse {
-          animation: pulse ${buttonProps.animationDuration || '1s'} infinite;
-        }
-        
-        .advanced-button-bounce {
-          animation: bounce ${buttonProps.animationDuration || '0.5s'} infinite;
-        }
-        
-        .advanced-button-fade-in {
-          animation: fade-in ${buttonProps.animationDuration || '0.3s'} ease-in;
-        }
-      `}</style>
+      <style>{animationStyles}</style>
     </div>
   )
 }
 
-// Attach default props and schema
-AdvancedButton.defaultProps = advancedButtonDefaultProps;
-(AdvancedButton as any).schema = advancedButtonSchema;
+// Attach schema metadata used by the editor registry
+(AdvancedButton as any).schema = advancedButtonSchema
 
 export default React.memo(AdvancedButton)

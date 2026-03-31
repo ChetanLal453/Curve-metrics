@@ -54,21 +54,21 @@ export const PropertyField: React.FC<PropertyFieldProps> = function PropertyFiel
   switch (config.type) {
     case 'text':
       return (
-        <div className="frow">
+        <div className="rp-field frow">
           <label className="flbl">{config.label}</label>
-          <input type="text" value={localValue} onChange={handleTextChange} className="fi" placeholder={config.placeholder} />
+          <input type="text" value={localValue} onChange={handleTextChange} className="rp-input fi" placeholder={config.placeholder} />
         </div>
       )
 
     case 'textarea':
       return (
-        <div className="frow">
+        <div className="rp-field frow">
           <label className="flbl">{config.label}</label>
           <textarea
             value={localValue}
             onChange={handleTextChange}
             rows={4}
-            className="ta"
+            className="rp-input ta"
             placeholder={config.placeholder}
           />
         </div>
@@ -77,9 +77,9 @@ export const PropertyField: React.FC<PropertyFieldProps> = function PropertyFiel
     case 'select':
       const selectValue = normalizeSelectValue(value)
       return (
-        <div className="frow">
+        <div className="rp-field frow">
           <label className="flbl">{config.label}</label>
-          <select value={selectValue} onChange={handleImmediateChange} className="fsel">
+          <select value={selectValue} onChange={handleImmediateChange} className="rp-select fsel">
             {config.options?.map((option: string | { value: string; label: string }) => {
               const optionValue = typeof option === 'string' ? option : option.value
               const optionLabel = typeof option === 'string' ? option : option.label
@@ -95,18 +95,18 @@ export const PropertyField: React.FC<PropertyFieldProps> = function PropertyFiel
 
     case 'color':
       return (
-        <div className="frow">
+        <div className="rp-field frow">
           <label className="flbl">{config.label}</label>
           <div className="color-row">
             <input type="color" value={value || '#000000'} onChange={handleImmediateChange} className="colorinp" />
-            <input type="text" value={value || '#000000'} onChange={handleImmediateChange} className="fi" />
+            <input type="text" value={value || '#000000'} onChange={handleImmediateChange} className="rp-input fi" />
           </div>
         </div>
       )
 
     case 'number':
       return (
-        <div className="frow">
+        <div className="rp-field frow">
           <label className="flbl">{config.label}</label>
           <input
             type="number"
@@ -115,14 +115,14 @@ export const PropertyField: React.FC<PropertyFieldProps> = function PropertyFiel
             min={config.min}
             max={config.max}
             step={config.step}
-            className="fi"
+            className="rp-input fi"
           />
         </div>
       )
 
     case 'range':
       return (
-        <div className="frow">
+        <div className="rp-field frow">
           <label className="flbl">{config.label}</label>
           <div className="range-row">
             <input
@@ -132,7 +132,7 @@ export const PropertyField: React.FC<PropertyFieldProps> = function PropertyFiel
               min={config.min}
               max={config.max}
               step={config.step}
-              className="rangeinp"
+              className="slider rangeinp"
             />
             <span className="rangeval">{value || config.default || 0}</span>
           </div>

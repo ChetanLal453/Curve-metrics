@@ -3,7 +3,7 @@ import { extname, join } from 'path'
 import pool from '../../../../lib/db.js'
 import { randomUUID } from 'crypto'
 import { requireAdmin } from '../../../../lib/require-admin.js'
-import { missingTableResponse, tableExists } from '../../_utils/crud.js'
+import { getExistingColumns, missingTableResponse, tableExists } from '../../_utils/crud.js'
 
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp'])
@@ -37,6 +37,11 @@ export async function POST(request) {
     await mkdir(uploadDir, { recursive: true })
 
     const uploaded = []
+    const tableColumns = new Set(await getExistingColumns('media_library'))
+
+    if (!tableColumns.size) {
+      return missingTableResponse('media_library')
+    }
 
     for (const file of files) {
       if (!(file instanceof File)) {
@@ -65,37 +70,66 @@ export async function POST(request) {
 
       await writeFile(filePath, buffer)
 
-      await pool.execute(
-        `INSERT INTO media_library (
-          id,
-          name,
-          original_name,
-          filename,
-          original_filename,
-          url,
-          type,
-          size,
-          alt,
-          tags,
-          uploaded_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-        [
-          mediaId,
-          uniqueName,
-          file.name,
-          uniqueName,
-          file.name,
-          fileUrl,
-          normalizedMimeType,
-          Number(file.size || 0),
-          '',
-          JSON.stringify([]),
-        ],
-      )
+      const insertableValues = {
+        name: uniqueName,
+        original_name: file.name,
+        filename: uniqueName,
+        original_filename: file.name,
+        url: fileUrl,
+        type: normalizedMimeType,
+        size: Number(file.size || 0),
+        alt: '',
+        tags: JSON.stringify([]),
+      }
+
+      const valueColumns = Object.keys(insertableValues).filter((column) => tableColumns.has(column))
+      const valuePlaceholders = valueColumns.map(() => '?')
+      const valueParams = valueColumns.map((column) => insertableValues[column])
+
+      const nowColumns = []
+      if (tableColumns.has('uploaded_at')) nowColumns.push('uploaded_at')
+      if (tableColumns.has('updated_at')) nowColumns.push('updated_at')
+      if (tableColumns.has('created_at')) nowColumns.push('created_at')
+
+      const allColumns = [...valueColumns, ...nowColumns]
+      const allPlaceholders = [...valuePlaceholders, ...nowColumns.map(() => 'NOW()')]
+
+      if (!allColumns.length) {
+        throw new Error('media_library table has no writable columns for upload')
+      }
+
+      let persistedId = mediaId
+
+      if (tableColumns.has('id')) {
+        try {
+          const columnsWithId = ['id', ...allColumns]
+          const placeholdersWithId = ['?', ...allPlaceholders]
+          const paramsWithId = [mediaId, ...valueParams]
+          const [insertResult] = await pool.execute(
+            `INSERT INTO media_library (${columnsWithId.join(', ')}) VALUES (${placeholdersWithId.join(', ')})`,
+            paramsWithId,
+          )
+          if (insertResult?.insertId) {
+            persistedId = insertResult.insertId
+          }
+        } catch {
+          const [insertResult] = await pool.execute(
+            `INSERT INTO media_library (${allColumns.join(', ')}) VALUES (${allPlaceholders.join(', ')})`,
+            valueParams,
+          )
+          if (insertResult?.insertId) {
+            persistedId = insertResult.insertId
+          }
+        }
+      } else {
+        await pool.execute(
+          `INSERT INTO media_library (${allColumns.join(', ')}) VALUES (${allPlaceholders.join(', ')})`,
+          valueParams,
+        )
+      }
 
       uploaded.push({
-        id: mediaId,
+        id: persistedId,
         filename: uniqueName,
         original_filename: file.name,
         url: fileUrl,

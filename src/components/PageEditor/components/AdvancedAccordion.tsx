@@ -61,14 +61,21 @@ export const advancedAccordionDefaultProps: AdvancedAccordionProps = {
   items: [
     {
       id: '1',
-      title: 'Frequently Asked Question 1',
-      content: 'This is the detailed answer for the first question.',
+      title: 'What is CurveMetrics?',
+      content:
+        'CurveMetrics is a unified analytics platform that helps teams track their most important metrics across channels — all in one dashboard.',
       visible: true,
     },
     {
       id: '2',
-      title: 'Frequently Asked Question 2',
-      content: 'This is the detailed answer for the second question.',
+      title: 'How does pricing work?',
+      content: 'Choose a plan based on monthly tracked events and active workspaces, then scale as your team grows.',
+      visible: true,
+    },
+    {
+      id: '3',
+      title: 'Can I export my data?',
+      content: 'Yes, you can export reports and dashboards in CSV and JSON formats with role-based access controls.',
       visible: true,
     },
   ],
@@ -83,28 +90,28 @@ export const advancedAccordionDefaultProps: AdvancedAccordionProps = {
   margin: '0px',
 
   // Typography
-  titleFontSize: '16px',
-  titleFontWeight: '600',
-  contentFontSize: '14px',
-  fontFamily: 'system-ui, sans-serif',
-  lineHeight: '1.5',
+  titleFontSize: '13px',
+  titleFontWeight: '500',
+  contentFontSize: '13px',
+  fontFamily: "'DM Sans', system-ui, sans-serif",
+  lineHeight: '1.65',
 
   // Colors & Styling
-  titleColor: '#1f2937',
-  titleBackground: '#f9fafb',
-  contentColor: '#4b5563',
-  contentBackground: '#ffffff',
-  border: '1px solid #e5e7eb',
+  titleColor: '#e8eaf0',
+  titleBackground: '#1a1d28',
+  contentColor: '#8b90a8',
+  contentBackground: '#13161e',
+  border: '1px solid rgba(255,255,255,0.07)',
   borderRadius: '8px',
-  activeTitleColor: '#1f2937',
-  activeTitleBackground: '#f3f4f6',
+  activeTitleColor: '#a594ff',
+  activeTitleBackground: 'rgba(124,109,250,0.12)',
 
   // Icons & Animation
   iconPosition: 'right',
-  icon: '▼',
-  activeIcon: '▲',
+  icon: 'chevron',
+  activeIcon: 'chevron',
   animation: 'slide',
-  animationDuration: 300,
+  animationDuration: 200,
 
   // Callbacks (defaults)
   onUpdate: undefined,
@@ -326,33 +333,36 @@ const AccordionItem: React.FC<{
 
   const itemStyle: React.CSSProperties = {
     marginBottom: props.itemSpacing || '8px',
-    border: props.border || '1px solid #e5e7eb',
+    border: props.border || '1px solid rgba(255,255,255,0.07)',
     borderRadius: props.borderRadius || '8px',
     overflow: 'hidden',
     transition: 'all 0.2s ease',
+    background: '#13161e',
   }
 
   const headerStyle: React.CSSProperties = {
-    padding: '16px 20px',
+    padding: '13px 16px',
     backgroundColor: isOpen ? props.activeTitleBackground : props.titleBackground,
     color: isOpen ? props.activeTitleColor : props.titleColor,
-    fontSize: props.titleFontSize || '16px',
-    fontWeight: props.titleFontWeight || '600',
+    fontSize: props.titleFontSize || '13px',
+    fontWeight: props.titleFontWeight || '500',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '12px',
+    gap: '10px',
     border: 'none',
     width: '100%',
     textAlign: 'left',
     transition: 'all 0.2s ease',
+    borderBottom: isOpen ? '1px solid rgba(124,109,250,0.15)' : '1px solid transparent',
+    fontFamily: props.fontFamily,
   }
 
   const contentStyle: React.CSSProperties = {
-    backgroundColor: props.contentBackground || '#ffffff',
-    color: props.contentColor || '#4b5563',
-    fontSize: props.contentFontSize || '14px',
+    backgroundColor: props.contentBackground || '#13161e',
+    color: props.contentColor || '#8b90a8',
+    fontSize: props.contentFontSize || '13px',
     overflow: 'hidden',
     transition: props.animation !== 'none' ? `all ${props.animationDuration}ms ease` : 'none',
   }
@@ -368,7 +378,9 @@ const AccordionItem: React.FC<{
     contentStyle.display = isOpen ? 'block' : 'none'
   }
 
-  const icon = isOpen ? props.activeIcon || '▲' : props.icon || '▼'
+  const closedIcon = props.icon || 'chevron'
+  const openIcon = props.activeIcon || closedIcon
+  const useChevron = closedIcon === 'chevron' && openIcon === 'chevron'
 
   return (
     <div style={itemStyle} className="accordion-item">
@@ -377,21 +389,47 @@ const AccordionItem: React.FC<{
         onClick={onToggle}
         aria-expanded={isOpen}
         aria-controls={`accordion-content-${item.id}`}
-        className="accordion-header focus:outline-none focus:ring-2 focus:ring-blue-300"
+        className="accordion-header"
       >
         {props.iconPosition === 'left' && (
-          <span className="accordion-icon" style={{ fontSize: '12px', minWidth: '16px' }}>
-            {icon}
+          <span className="accordion-icon" style={{ minWidth: '16px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            {useChevron ? (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            ) : (
+              <span style={{ fontSize: '12px' }}>{isOpen ? openIcon : closedIcon}</span>
+            )}
           </span>
         )}
 
-        <span className="accordion-title flex-1" style={{ textAlign: 'left' }}>
+        <span className="accordion-title flex-1" style={{ textAlign: 'left', lineHeight: 1.3 }}>
           {item.title}
         </span>
 
         {props.iconPosition !== 'left' && (
-          <span className="accordion-icon" style={{ fontSize: '12px', minWidth: '16px' }}>
-            {icon}
+          <span className="accordion-icon" style={{ minWidth: '16px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            {useChevron ? (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            ) : (
+              <span style={{ fontSize: '12px' }}>{isOpen ? openIcon : closedIcon}</span>
+            )}
           </span>
         )}
       </button>
@@ -404,7 +442,7 @@ const AccordionItem: React.FC<{
         role="region"
         className="accordion-content"
       >
-        <div style={{ padding: '20px', lineHeight: props.lineHeight }}>
+        <div style={{ padding: '14px 16px', lineHeight: props.lineHeight }}>
           {item.content}
         </div>
       </div>
@@ -459,6 +497,8 @@ const AdvancedAccordion: React.FC<AdvancedAccordionProps> = (props) => {
     fontFamily: accordionProps.fontFamily,
     lineHeight: accordionProps.lineHeight,
     cursor: 'pointer',
+    width: '100%',
+    maxWidth: '520px',
   }
 
   if (items.length === 0) {

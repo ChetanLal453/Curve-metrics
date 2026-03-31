@@ -10,6 +10,25 @@ import { ComponentWrapper } from './ComponentWrapper'
 import { Edit, Trash2 } from 'lucide-react'
 import { useStableComponentsArray } from '../hooks/useStableComponentsArray'
 
+const DEBUG_NEW_GRID = false
+const debugLog = (...args: unknown[]) => {
+  if (DEBUG_NEW_GRID) {
+    console.log(...args)
+  }
+}
+
+const safeJsonParse = <T,>(value: unknown, fallback: T): T => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return fallback
+  }
+
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return fallback
+  }
+}
+
 interface GridCellProps {
   rowIndex: number
   colIndex: number
@@ -85,10 +104,10 @@ interface NewGridComponentProps {
 
 export const newGridDefaultProps = {
   columns: 3,
-  rows: 1,
-  gap: 16,
-  padding: 8,
-  margin: 8,
+  rows: 2,
+  gap: 10,
+  padding: 24,
+  margin: 0,
   backgroundColor: 'transparent',
   border: 'none',
   borderRadius: 0,
@@ -408,7 +427,7 @@ const SortableGridCell: React.FC<{
 
   // ✅ FIXED: Edit handler that works with ComponentWrapper's onEdit prop
   const handleEditClick = useCallback(() => {
-    console.log('🔘 SortableGridCell: Edit button clicked for component:', {
+    debugLog('🔘 SortableGridCell: Edit button clicked for component:', {
       componentId: component?.id,
       componentType: component?.type,
       context,
@@ -576,33 +595,43 @@ const GridCell = memo(
     )
 
     const cellStyle = useMemo((): React.CSSProperties => {
+      const previewSurface = '#1a1d28'
+      const previewSurfaceSoft = '#13161e'
+      const previewBorder = 'rgba(255,255,255,0.07)'
+      const previewBorderStrong = 'rgba(255,255,255,0.13)'
+      const previewAccent = '#7c6dfa'
+      const previewAccentSoft = 'rgba(124,109,250,0.12)'
+
       const baseStyle = {
-        border: '2px dashed #d1d5db',
-        borderRadius: '6px',
-        minHeight: '100px',
+        border: `1px solid ${component ? previewBorderStrong : previewBorder}`,
+        borderRadius: '8px',
+        minHeight: '104px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: '#6b7280',
-        fontSize: '14px',
+        color: '#8b90a8',
+        fontSize: '11px',
         transition: 'all 0.2s ease-in-out',
-        padding: '8px',
+        padding: component ? '0' : '16px',
         boxSizing: 'border-box' as const,
         position: 'relative' as const,
         pointerEvents: 'auto' as const,
         cursor: 'pointer',
-        backgroundColor: '#f9fafb',
+        backgroundColor: component ? previewSurfaceSoft : previewSurface,
+        overflow: 'hidden' as const,
+        fontFamily: "'DM Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
       }
 
       return isOver
         ? {
             ...baseStyle,
-            border: '2px dashed #3b82f6',
-            backgroundColor: '#dbeafe',
-            color: '#1e40af',
+            border: `1px solid ${previewAccent}`,
+            backgroundColor: previewAccentSoft,
+            color: '#a594ff',
+            boxShadow: `0 0 0 1px ${previewAccentSoft} inset`,
           }
         : baseStyle
-    }, [isOver])
+    }, [isOver, component])
 
     const handleDelete = useCallback(
       (componentId: string, nestedContext?: any) => {
@@ -624,13 +653,7 @@ const GridCell = memo(
     return (
       <div
         ref={setNodeRef}
-        style={{
-          ...cellStyle,
-          backgroundColor: component ? '#e0f2fe' : '#f9fafb',
-          border: component ? '2px solid #0ea5e9' : cellStyle.border,
-          maxWidth: '100%', // ✅ ADD THIS
-          overflow: 'hidden', // ✅ ADD THIS
-        }}
+        style={cellStyle}
         onClick={(e) => {
           e.stopPropagation()
         }}
@@ -641,7 +664,7 @@ const GridCell = memo(
         data-row-index={rowIndex}
         data-col-index={colIndex}
         data-dragging-over={isOver}
-        className={`grid-cell ${isOver ? 'drag-over-active' : ''}`}>
+        className={`grid-cell cm-preview-grid-cell ${isOver ? 'drag-over-active' : ''}`}>
         <SortableGridCell
           component={component}
           draggableId={draggableId}
@@ -651,7 +674,7 @@ const GridCell = memo(
           setSelectedComponent={setSelectedComponent}
           deleteComponent={deleteComponent}
           onDeleteChildComponent={handleDelete}>
-          {component ? (
+          {!component ? (
             <div
               style={{
                 width: '100%',
@@ -659,70 +682,35 @@ const GridCell = memo(
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: isOver ? '#1e40af' : '#6b7280',
+                color: isOver ? '#a594ff' : '#8b90a8',
                 fontWeight: 'normal',
-                fontSize: '14px',
+                fontSize: '10px',
                 pointerEvents: 'none',
                 textAlign: 'center',
-                padding: '8px',
+                padding: '0',
                 opacity: isOver ? 0.7 : 1,
+                flexDirection: 'column',
+                gap: '6px',
               }}>
-              <div style={{ textAlign: 'center' }}>
-                <div
-                  style={{
-                    color: isOver ? '#1e40af' : '#6b7280',
-                    fontWeight: isOver ? 'bold' : 'normal',
-                  }}>
-                  Component loaded ✓{isOver && ' 🔥'}
-                </div>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    opacity: 0.7,
-                    marginTop: '2px',
-                    color: isOver ? '#1e40af' : '#6b7280',
-                  }}>
-                  Row {rowIndex}, Col {colIndex}
-                </div>
+              <div
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '5px',
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: isOver ? 'rgba(124,109,250,0.22)' : 'rgba(124,109,250,0.12)',
+                  color: '#a594ff',
+                  fontFamily: "'DM Sans', system-ui, sans-serif",
+                  fontSize: '14px',
+                  fontWeight: 700,
+                }}>
+                +
               </div>
+              <div style={{ letterSpacing: '0.03em', textTransform: 'uppercase' }}>Drop Here</div>
+              <div style={{ opacity: 0.7 }}>r{rowIndex + 1} · c{colIndex + 1}</div>
             </div>
-          ) : (
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: isOver ? '#1e40af' : '#6b7280',
-                fontWeight: 'normal',
-                fontSize: '14px',
-                pointerEvents: 'none',
-                textAlign: 'center',
-                padding: '8px',
-                opacity: isOver ? 0.7 : 1,
-              }}>
-              <div style={{ textAlign: 'center' }}>
-                <div
-                  style={{
-                    color: isOver ? '#1e40af' : '#6b7280',
-                    fontWeight: isOver ? 'bold' : 'normal',
-                  }}>
-                  Drop component here
-                  {isOver && ' 🔥'}
-                </div>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    opacity: 0.7,
-                    marginTop: '2px',
-                    color: isOver ? '#1e40af' : '#6b7280',
-                  }}>
-                  Row {rowIndex}, Col {colIndex}
-                </div>
-              </div>
-            </div>
-          )}
+          ) : null}
         </SortableGridCell>
       </div>
     )
@@ -765,11 +753,9 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
   const componentProps = { ...newGridDefaultProps, ...props }
 
   const [localComponent, setLocalComponent] = useState(propComponent)
-  const [childUpdateCount, setChildUpdateCount] = useState(0)
-  const [lastUpdateTime, setLastUpdateTime] = useState(Date.now())
 
   useEffect(() => {
-    console.log('🔄 NewGrid: Prop component updated:', {
+    debugLog('🔄 NewGrid: Prop component updated:', {
       propComponentId: propComponent?.id,
       propComponentType: propComponent?.type,
       hasProps: !!propComponent?.props,
@@ -782,18 +768,19 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
     if (propComponent) {
       setLocalComponent(propComponent)
     }
-  }, [propComponent, carouselId, slideIndex, props.cells])
+  }, [propComponent])
 
   const parsedRows = rows || localComponent?.props?.rows || 1
   const parsedColumns = columns || localComponent?.props?.columns || 3
-  const parsedGap = Number(gap) || 16
-  const parsedPadding = Number(padding) || 8
-  const parsedMargin = Number(margin) || 8
+  const parsedGap = Number(gap) || 10
+  const parsedPadding = Number(padding) || 24
+  const parsedMargin = Number(margin) || 0
 
   const currentComponentsCount = components.filter((c) => c !== null && c !== undefined && typeof c === 'object' && c.id && c.type).length
 
+  const fallbackGridIdRef = useRef(`NewGrid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`)
   const gridId = useMemo(() => {
-    console.log('🔍 NewGrid: Determining grid ID:', {
+    debugLog('🔍 NewGrid: Determining grid ID:', {
       localComponentId: localComponent?.id,
       propId: id,
       componentId: propComponent?.id,
@@ -803,37 +790,35 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
     })
 
     if (propComponent?.id) {
-      console.log('✅ Using propComponent ID:', propComponent.id)
+      debugLog('✅ Using propComponent ID:', propComponent.id)
       return propComponent.id
     }
 
     if (localComponent?.id) {
-      console.log('✅ Using localComponent ID:', localComponent.id)
+      debugLog('✅ Using localComponent ID:', localComponent.id)
       return localComponent.id
     }
 
     if (props?.id) {
-      console.log('✅ Using props ID:', props.id)
+      debugLog('✅ Using props ID:', props.id)
       return props.id
     }
 
     if (id) {
-      console.log('✅ Using prop ID:', id)
+      debugLog('✅ Using prop ID:', id)
       return id
     }
 
-    const fallbackId = carouselId
-      ? `grid-${carouselId}-slide-${slideIndex}-${Date.now()}`
-      : `NewGrid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const fallbackId = carouselId ? `grid-${carouselId}-slide-${slideIndex}` : fallbackGridIdRef.current
 
-    console.log('🔧 Generated fallback grid ID:', fallbackId)
+    debugLog('🔧 Generated fallback grid ID:', fallbackId)
     return fallbackId
   }, [localComponent?.id, id, propComponent?.id, props?.id, carouselId, slideIndex])
 
   const gridComponents = useStableComponentsArray(components, parsedColumns, parsedRows)
 
   useEffect(() => {
-    console.log('🎯 NewGrid Component Debug:', {
+    debugLog('🎯 NewGrid Component Debug:', {
       gridId,
       carouselId,
       slideIndex,
@@ -866,7 +851,7 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
 
   const handleComponentUpdate = useCallback(
     (componentId: string, newProps: Record<string, any>) => {
-      console.log('🔄 NewGrid: handleComponentUpdate called:', {
+      debugLog('🔄 NewGrid: handleComponentUpdate called:', {
         componentId,
         gridId,
         carouselId,
@@ -877,9 +862,6 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
       if (componentId === gridId) {
         return
       }
-
-      setChildUpdateCount((prev) => prev + 1)
-      setLastUpdateTime(Date.now())
 
       let updatedComponent = null
 
@@ -924,43 +906,26 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
       }
 
       if (updatedComponent) {
-        console.log('✅ NewGrid: Updated local component with new props')
+        debugLog('✅ NewGrid: Updated local component with new props')
         setLocalComponent(updatedComponent)
       }
 
       if (onUpdate && updatedComponent) {
-        console.log('📤 NewGrid: Calling onUpdate with new props')
+        debugLog('📤 NewGrid: Calling onUpdate with new props')
         onUpdate(updatedComponent.props)
       }
 
       if (onComponentUpdate) {
-        console.log('📤 NewGrid: Bubbling update to parent')
+        debugLog('📤 NewGrid: Bubbling update to parent')
         onComponentUpdate(componentId, newProps)
       }
     },
     [localComponent, onUpdate, onComponentUpdate, gridId, parentGridId],
   )
 
-  const handleComponentSelect = useCallback(
-    (gridComponent: LayoutComponent, context: GridComponentContext) => {
-      if (onComponentSelect) {
-        onComponentSelect(gridComponent, context)
-      }
-
-      if (setSelectedComponent) {
-        setSelectedComponent({
-          sectionId: context.sectionId || sectionId || 'grid-section',
-          compId: gridComponent.id,
-          component: gridComponent,
-        })
-      }
-    },
-    [onComponentSelect, setSelectedComponent, sectionId],
-  )
-
   const getComponentFromCell = useCallback(
     (rowIndex: number, colIndex: number): LayoutComponent | null => {
-      console.log('🔍 NewGrid: getComponentFromCell called:', {
+      debugLog('🔍 NewGrid: getComponentFromCell called:', {
         rowIndex,
         colIndex,
         gridId,
@@ -976,7 +941,7 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
         const row = props.cells[rowIndex]
         if (row && row[colIndex] && row[colIndex].component) {
           const comp = row[colIndex].component
-          console.log('✅ Found component in direct props.cells:', {
+          debugLog('✅ Found component in direct props.cells:', {
             componentId: comp.id,
             type: comp.type,
             rowIndex,
@@ -992,7 +957,7 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
         const row = localComponent.props.cells[rowIndex]
         if (row && row[colIndex] && row[colIndex].component) {
           const comp = row[colIndex].component
-          console.log('✅ Found component in cells structure (localComponent):', {
+          debugLog('✅ Found component in cells structure (localComponent):', {
             componentId: comp.id,
             type: comp.type,
             rowIndex,
@@ -1007,7 +972,7 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
         const row = propComponent.props.cells[rowIndex]
         if (row && row[colIndex] && row[colIndex].component) {
           const comp = row[colIndex].component
-          console.log('✅ Found component in cells structure (propComponent):', {
+          debugLog('✅ Found component in cells structure (propComponent):', {
             componentId: comp.id,
             type: comp.type,
             rowIndex,
@@ -1021,11 +986,11 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
       const cellIndex = rowIndex * parsedColumns + colIndex
       const comp = gridComponents[cellIndex]
       if (comp) {
-        console.log('✅ Found component in gridComponents:', comp)
+        debugLog('✅ Found component in gridComponents:', comp)
         return comp
       }
 
-      console.log('❌ No component found at:', { rowIndex, colIndex })
+      debugLog('❌ No component found at:', { rowIndex, colIndex })
       return null
     },
     [localComponent?.props, propComponent?.props, gridComponents, parsedColumns, gridId, carouselId, slideIndex, props.cells],
@@ -1106,8 +1071,6 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
         }
 
         setLocalComponent(newLocalComponent)
-        setChildUpdateCount((prev) => prev + 1)
-        setLastUpdateTime(Date.now())
 
         if (onUpdate) {
           onUpdate(updatedProps)
@@ -1165,27 +1128,60 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
     [deleteComponent, gridId, sectionId, containerId, rowId, colId, carouselId, slideIndex, parentComponentId],
   )
 
+  const parsedDataAttributes = useMemo(
+    () => safeJsonParse<Record<string, string>>(componentProps.dataAttributes, {}),
+    [componentProps.dataAttributes],
+  )
+
+  const parsedCustomCss = useMemo(
+    () => safeJsonParse<Record<string, string | number>>(componentProps.customCSS, {}),
+    [componentProps.customCSS],
+  )
+
+  const previewCardStyle = useMemo(
+    (): React.CSSProperties => ({
+      position: 'relative',
+      width: '100%',
+      margin: `${parsedMargin}px`,
+      background: componentProps.backgroundColor && componentProps.backgroundColor !== 'transparent' ? componentProps.backgroundColor : '#13161e',
+      border:
+        componentProps.border && componentProps.border !== 'none'
+          ? componentProps.border
+          : '1px solid rgba(255,255,255,0.07)',
+      borderRadius: `${componentProps.borderRadius && componentProps.borderRadius > 0 ? componentProps.borderRadius : 12}px`,
+      overflow: 'hidden',
+      boxSizing: 'border-box',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+      ...parsedCustomCss,
+    }),
+    [parsedMargin, componentProps.backgroundColor, componentProps.border, componentProps.borderRadius, parsedCustomCss],
+  )
+
+  const previewBodyStyle = useMemo(
+    (): React.CSSProperties => ({
+      padding: `${parsedPadding}px ${Math.max(parsedPadding + 8, 18)}px`,
+      backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)',
+      backgroundSize: '20px 20px',
+      backgroundColor: '#13161e',
+      borderBottom: '1px solid rgba(255,255,255,0.07)',
+    }),
+    [parsedPadding],
+  )
+
   const gridStyle = useMemo(
-  (): React.CSSProperties => ({
-    display: 'grid',
-    gridTemplateColumns: `repeat(${parsedColumns}, 1fr)`,
-    gridAutoRows: 'minmax(100px, auto)',
-    gap: `${parsedGap}px`,
-    padding: `${parsedPadding}px`,
-    margin: `${parsedMargin}px`,
-    width: '100%',
-    maxWidth: '100%', // ✅ ADD THIS
-    boxSizing: 'border-box' as const,
-    position: 'relative',
-    minHeight: '150px',
-    background: componentProps.backgroundColor,
-    border: componentProps.border,
-    borderRadius: `${componentProps.borderRadius}px`,
-    overflow: 'hidden', // ✅ ADD THIS to contain children
-    ...(componentProps.customCSS ? JSON.parse(componentProps.customCSS || '{}') : {}),
-  }),
-  [parsedColumns, parsedGap, parsedPadding, parsedMargin, componentProps],
-)
+    (): React.CSSProperties => ({
+      display: 'grid',
+      gridTemplateColumns: `repeat(${parsedColumns}, 1fr)`,
+      gridAutoRows: 'minmax(100px, auto)',
+      gap: `${parsedGap}px`,
+      width: '100%',
+      maxWidth: '100%',
+      boxSizing: 'border-box',
+      position: 'relative',
+      minHeight: '150px',
+    }),
+    [parsedColumns, parsedGap],
+  )
 
   const gridConfig = useMemo(
     () => ({
@@ -1217,7 +1213,7 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
   )
 
   const gridCells = useMemo(() => {
-    console.log('🔄 NewGrid: Re-rendering gridCells - DEBUG:', {
+    debugLog('🔄 NewGrid: Re-rendering gridCells - DEBUG:', {
       hasOnComponentSelect: !!onComponentSelect,
       onComponentSelectType: typeof onComponentSelect,
       gridId,
@@ -1277,8 +1273,6 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
     localComponent?.props?.cells,
     propComponent?.props?.cells,
     props.cells,
-    childUpdateCount,
-    lastUpdateTime,
     components,
   ])
 
@@ -1289,8 +1283,8 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
   return (
     <div
       ref={gridRef}
-      style={gridStyle}
-      className={`new-grid-container relative group ${componentProps.className || ''}`}
+      style={previewCardStyle}
+      className={`new-grid-container cm-preview-grid relative group ${componentProps.className || ''}`}
       onClick={(e) => {
         e.stopPropagation()
         onSelect?.()
@@ -1300,32 +1294,90 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
       data-parent-component-id={parentComponentId}
       data-carousel-id={carouselId}
       data-slide-index={slideIndex}
-      data-update-count={childUpdateCount}
       id={componentProps.id || gridId}
-      {...(componentProps.dataAttributes ? JSON.parse(componentProps.dataAttributes) : {})}>
+      {...parsedDataAttributes}>
       <div
-        className="absolute top-2 right-2 text-xs font-medium bg-white border border-gray-300 px-2 py-1 rounded shadow-sm z-50 text-gray-600"
-        style={{ right: '8px' }}>
-        Grid ({parsedColumns}×{parsedRows}){carouselId && ` • Slide ${(slideIndex || 0) + 1}`}
-        <span className="ml-1 font-bold">{currentComponentsCount} components</span>
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '12px 16px',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
+          background: '#1a1d28',
+        }}>
+        <span
+          style={{
+            fontSize: '10px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            background: 'rgba(124,109,250,0.12)',
+            color: '#a594ff',
+            padding: '2px 8px',
+            borderRadius: '20px',
+            border: '1px solid rgba(124,109,250,0.2)',
+          }}>
+          Advanced
+        </span>
+        <span style={{ fontSize: '13px', fontWeight: 600, color: '#e8eaf0' }}>Grid</span>
+        <span
+          style={{
+            marginLeft: 'auto',
+            color: '#5a5f7a',
+            fontSize: '11.5px',
+            fontFamily: "'DM Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+          }}>
+          {parsedColumns} cols · responsive
+        </span>
       </div>
 
-      <div className="absolute top-10 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-50" style={{ right: '8px' }}>
+      <div style={previewBodyStyle}>
+        <div style={gridStyle}>{gridCells}</div>
+      </div>
+
+      <div
+        className="absolute top-2 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-50"
+        style={{ right: '10px' }}>
         <button
           onClick={handleEditClick}
-          className="p-1 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded shadow-sm transition-colors"
+          className="p-1 transition-colors"
+          style={{
+            background: '#13161e',
+            color: '#8b90a8',
+            border: '1px solid rgba(255,255,255,0.13)',
+            borderRadius: '6px',
+          }}
           title="Edit Grid">
           <Edit size={12} />
         </button>
         <button
           onClick={handleDeleteClick}
-          className="p-1 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded shadow-sm transition-colors"
+          className="p-1 transition-colors"
+          style={{
+            background: '#13161e',
+            color: '#8b90a8',
+            border: '1px solid rgba(255,255,255,0.13)',
+            borderRadius: '6px',
+          }}
           title="Delete Grid">
           <Trash2 size={12} />
         </button>
       </div>
 
-      {gridCells}
+      <div
+        style={{
+          padding: '10px 16px 12px',
+          fontSize: '11.5px',
+          color: '#5a5f7a',
+          background: '#1a1d28',
+          borderTop: '1px solid rgba(255,255,255,0.07)',
+          fontFamily: "'DM Sans', system-ui, sans-serif",
+        }}>
+        CSS Grid layout with configurable columns, gap, and responsive breakpoints.
+        <span style={{ marginLeft: '8px', color: '#8b90a8', fontFamily: "'DM Mono', ui-monospace, monospace" }}>
+          {parsedColumns}x{parsedRows} · {currentComponentsCount} components
+        </span>
+      </div>
     </div>
   )
 }
@@ -1333,7 +1385,7 @@ const NewGridComponent: React.FC<NewGridComponentProps> = ({
 ;(NewGridComponent as any).schema = newGridSchema
 
 export default NewGridComponent
-export { NewGridComponent as NewGrid }
+export { NewGridComponent }
 
 const gridPropsAreEqual = (prevProps: NewGridComponentProps, nextProps: NewGridComponentProps) => {
   if (prevProps.id !== nextProps.id) return false
@@ -1432,3 +1484,5 @@ const gridPropsAreEqual = (prevProps: NewGridComponentProps, nextProps: NewGridC
 
 export const MemoizedNewGrid = memo(NewGridComponent, gridPropsAreEqual)
 MemoizedNewGrid.displayName = 'NewGrid'
+;(MemoizedNewGrid as any).schema = newGridSchema
+export { MemoizedNewGrid as NewGrid }

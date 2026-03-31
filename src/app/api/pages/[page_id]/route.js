@@ -38,6 +38,10 @@ function normalizePageRow(page) {
   }
 }
 
+function hasLayoutSections(layout) {
+  return Boolean(layout && Array.isArray(layout.sections) && layout.sections.length > 0)
+}
+
 async function getPageSelectClause() {
   const columns = await getExistingColumns('pages')
   const selectFields = [
@@ -89,9 +93,50 @@ export async function GET(_request, { params }) {
       return NextResponse.json({ success: false, error: 'Page not found' }, { status: 404 })
     }
 
+    const normalizedPage = normalizePageRow(rows[0])
+
+    if (!hasLayoutSections(normalizedPage.layout)) {
+      if (hasLayoutSections(normalizedPage.published_layout)) {
+        normalizedPage.layout = normalizeLayout(normalizedPage.published_layout, normalizedPage)
+      } else if (await tableExists('page_versions')) {
+        const versionColumns = await getExistingColumns('page_versions')
+        if (versionColumns.includes('page_id')) {
+          const selectLayoutExpr = versionColumns.includes('layout')
+            ? 'layout'
+            : versionColumns.includes('content')
+              ? 'content AS layout'
+              : 'NULL AS layout'
+          const orderBy =
+            versionColumns.includes('version_number') && versionColumns.includes('created_at')
+              ? 'ORDER BY version_number DESC, created_at DESC'
+              : versionColumns.includes('version_number')
+                ? 'ORDER BY version_number DESC'
+                : versionColumns.includes('created_at')
+                  ? 'ORDER BY created_at DESC'
+                  : ''
+
+          const [versionRows] = await pool.query(
+            `SELECT ${selectLayoutExpr}
+             FROM page_versions
+             WHERE page_id = ?
+             ${orderBy}
+             LIMIT 1`,
+            [pageId],
+          )
+
+          if (Array.isArray(versionRows) && versionRows.length > 0) {
+            const recoveredLayout = parseJsonValue(versionRows[0].layout, null)
+            if (hasLayoutSections(recoveredLayout)) {
+              normalizedPage.layout = normalizeLayout(recoveredLayout, normalizedPage)
+            }
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      page: normalizePageRow(rows[0]),
+      page: normalizedPage,
     })
   } catch (error) {
     return databaseErrorResponse(error)

@@ -46,12 +46,12 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
   }
 
   return (
-    <div className="p-8 h-full flex items-center justify-center">
+    <div className="media-uploader-shell">
       <div
-        className={`w-full max-w-md p-8 border-2 border-dashed rounded-lg text-center transition-colors ${
+        className={`media-uploader-card text-center transition-colors ${
           dragOver
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
+            ? 'is-dragover'
+            : ''
         }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -59,34 +59,34 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({
       >
         {uploading ? (
           <div>
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-lg font-medium text-gray-900">Uploading...</p>
-            <p className="text-sm text-gray-600 mt-1">Please wait while we process your files</p>
+            <div className="media-spinner"></div>
+            <p className="media-uploader-title">Uploading...</p>
+            <p className="media-uploader-copy">Please wait while we process your files</p>
           </div>
         ) : (
           <div>
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="media-uploader-icon">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
             </div>
 
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <h3 className="media-uploader-title">
               Upload Media Files
             </h3>
 
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="media-uploader-copy">
               Drag and drop your files here, or click to browse
             </p>
 
             <button
               onClick={handleClick}
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+              className="media-button media-button-primary"
             >
               Choose Files
             </button>
 
-            <p className="text-xs text-gray-500 mt-4">
+            <p className="media-uploader-foot">
               Supports images, videos, and documents
             </p>
           </div>

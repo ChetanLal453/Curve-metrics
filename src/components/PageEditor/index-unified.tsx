@@ -56,6 +56,62 @@ const moveItem = <T,>(items: T[], fromIndex: number, toIndex: number): T[] => {
   return nextItems
 }
 
+type ComponentLocation = {
+  sectionIndex: number
+  rowIndex: number
+  colIndex: number
+  componentIndex: number
+  columnId: string
+}
+
+const findComponentLocation = (layout: PageLayout | undefined, componentId: string): ComponentLocation | null => {
+  const sections = Array.isArray(layout?.sections) ? layout.sections : []
+
+  for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex += 1) {
+    const section = sections[sectionIndex]
+    const rows = Array.isArray(section?.container?.rows) ? section.container.rows : []
+
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex]
+      const columns = Array.isArray(row?.columns) ? row.columns : []
+
+      for (let colIndex = 0; colIndex < columns.length; colIndex += 1) {
+        const column = columns[colIndex]
+        const componentIndex = Array.isArray(column?.components)
+          ? column.components.findIndex((component: LayoutComponent | null) => component?.id === componentId)
+          : -1
+
+        if (componentIndex !== -1) {
+          return {
+            sectionIndex,
+            rowIndex,
+            colIndex,
+            componentIndex,
+            columnId: String(column?.id || ''),
+          }
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+const parseColumnDroppableId = (droppableId: string) => {
+  const parts = String(droppableId).split(':')
+  if (parts[0] !== 'column') return null
+
+  const [, sectionId, containerId, rowId, columnId] = parts
+  if (!sectionId || !rowId || !columnId) return null
+
+  return {
+    sectionId,
+    containerId: containerId || '',
+    rowId,
+    columnId,
+  }
+}
+
 const createEditorId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
 const cloneComponentTreeWithNewIds = (component: any): any => {
@@ -198,7 +254,6 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
   const [showCanvasGrid, setShowCanvasGrid] = useState(true)
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
-  const [, setSaveClock] = useState(0)
   const [selectedComponent, setSelectedComponent] = useState<{
     sectionId: string
     containerId: string
@@ -252,6 +307,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
     createPage,
     deletePage,
     disablePage,
+    renamePage,
   } = usePageData(pageId)
 
   // Undo/Redo for layout
@@ -273,12 +329,16 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
     currentLayoutRef.current = layout
   }, [layout])
 
+  const lastHistoryPageIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (JSON.stringify(baseLayout) === JSON.stringify(currentLayoutRef.current)) {
+    const layoutPageId = baseLayout?.id == null ? null : String(baseLayout.id)
+    if (!layoutPageId) return
+    if (lastHistoryPageIdRef.current === layoutPageId) {
       return
     }
 
     resetHistory(baseLayout)
+    lastHistoryPageIdRef.current = layoutPageId
   }, [baseLayout, resetHistory])
 
   const {
@@ -322,14 +382,9 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
     onSave: saveLayoutSilently,
     interval: 30000,
     debounceMs: 800,
-    enabled: Boolean(currentPageId),
-    identityKey: currentPageId,
+    enabled: Boolean(currentPageId) && !loading && String(layout?.id ?? '') === String(currentPageId),
+    identityKey: `${currentPageId ?? ''}:${loading ? 'loading' : 'ready'}`,
   })
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setSaveClock((tick) => tick + 1), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -390,7 +445,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
       }
 
       try {
-        const currentPage = pages.find((page) => page.id === currentPageId)
+        const currentPage = pages.find((page) => String(page.id) === String(currentPageId))
         if (!currentPage?.slug) {
           setSelectedHeaderSlug('')
           setSelectedFooterSlug('')
@@ -705,6 +760,82 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
         return
       }
 
+      const destinationDroppableId = String(result.destination?.droppableId || '')
+      const isSortableComponentMove =
+        Boolean(draggedItem?.data?.sortable) &&
+        typeof result.draggableId === 'string' &&
+        result.draggableId.startsWith('component:') &&
+        (destinationDroppableId.startsWith('component:') || destinationDroppableId.startsWith('column:'))
+
+      if (isSortableComponentMove) {
+        const sourceComponentId = String(result.draggableId).split(':')[1] || String(draggedItem?.id || '')
+        const targetComponentId = destinationDroppableId.startsWith('component:') ? destinationDroppableId.split(':')[1] || '' : ''
+        const targetColumnContext = destinationDroppableId.startsWith('column:') ? parseColumnDroppableId(destinationDroppableId) : null
+
+        if (sourceComponentId) {
+          setLayout((prevLayout) => {
+            const newLayout = JSON.parse(JSON.stringify(prevLayout))
+            const sourceLocation = findComponentLocation(newLayout, sourceComponentId)
+            const targetLocation = targetComponentId ? findComponentLocation(newLayout, targetComponentId) : null
+
+            if (!sourceLocation) {
+              return prevLayout
+            }
+
+            const sourceColumn =
+              newLayout.sections[sourceLocation.sectionIndex]?.container?.rows?.[sourceLocation.rowIndex]?.columns?.[sourceLocation.colIndex]
+
+            const targetColumn = targetLocation
+              ? newLayout.sections[targetLocation.sectionIndex]?.container?.rows?.[targetLocation.rowIndex]?.columns?.[targetLocation.colIndex]
+              : targetColumnContext
+                ? newLayout.sections
+                    .find((section: Section) => section.id === targetColumnContext.sectionId)
+                    ?.container?.rows?.find((row: any) => row.id === targetColumnContext.rowId)?.columns?.find((col: any) => col.id === targetColumnContext.columnId)
+                : null
+
+            if (!sourceColumn || !Array.isArray(sourceColumn.components) || !targetColumn || !Array.isArray(targetColumn.components)) {
+              return prevLayout
+            }
+
+            const sameColumn =
+              sourceLocation.sectionIndex === (targetLocation?.sectionIndex ?? sourceLocation.sectionIndex) &&
+              sourceLocation.rowIndex === (targetLocation?.rowIndex ?? sourceLocation.rowIndex) &&
+              sourceLocation.colIndex === (targetLocation?.colIndex ?? sourceLocation.colIndex)
+
+            const [movedComponent] = sourceColumn.components.splice(sourceLocation.componentIndex, 1)
+            if (!movedComponent) {
+              return prevLayout
+            }
+
+            const destinationIndex = targetLocation
+              ? sameColumn && sourceLocation.componentIndex < targetLocation.componentIndex
+                ? Math.max(0, targetLocation.componentIndex - 1)
+                : targetLocation.componentIndex
+              : Math.max(0, Math.min(result.destination?.index ?? targetColumn.components.length, targetColumn.components.length))
+
+            targetColumn.components.splice(destinationIndex, 0, movedComponent)
+
+            debugLog('🔀 Component reordered:', {
+              sourceComponentId,
+              sourceLocation,
+              targetComponentId,
+              targetColumnContext,
+              destinationIndex,
+            })
+
+            setTimeout(() => {
+              saveLayout(newLayout).then((success) => {
+                debugLog(success ? '💾 Component reorder saved' : '❌ Failed to save component reorder')
+              })
+            }, 0)
+
+            return newLayout
+          })
+
+          return
+        }
+      }
+
       // Extract the actual component type from draggedItem
       let componentType = draggedItem.type
 
@@ -894,8 +1025,9 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                       {
                         id: `slide-${Date.now()}`,
                         components: [],
-                        backgroundColor: '#ffffff',
-                        padding: '20px',
+                        bgType: 'gradient',
+                        bgGradient: 'linear-gradient(135deg, #1a1628, #22263a)',
+                        padding: '12px',
                       },
                     ]
                   }
@@ -907,8 +1039,9 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                       comp.props.slides.push({
                         id: `slide-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                         components: [],
-                        backgroundColor: '#ffffff',
-                        padding: '20px',
+                        bgType: 'gradient',
+                        bgGradient: 'linear-gradient(135deg, #1a1628, #22263a)',
+                        padding: '12px',
                       })
                     }
                   }
@@ -1287,7 +1420,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
         return false
       }
 
-      if (searchComponent(layout.sections || [])) {
+      if (searchComponent(layout?.sections || [])) {
         setSelectedComponent({
           ...foundContext,
           compId: componentId,
@@ -1594,13 +1727,36 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
     }
   }, [saveNow])
 
+  const handlePageSelect = useCallback(
+    async (pageId: string | null) => {
+      const nextPageId = pageId == null ? null : String(pageId)
+
+      if (nextPageId === currentPageId) {
+        return
+      }
+
+      if (currentPageId) {
+        const saved = await saveNow(true)
+        if (!saved) {
+          toast.error('Save failed. Please try again before switching pages.')
+          return
+        }
+      }
+
+      setCurrentPageId(nextPageId)
+    },
+    [currentPageId, saveNow, setCurrentPageId],
+  )
+
   const handlePublish = useCallback(async () => {
     if (!currentPageId) {
       toast.error('Select a page before publishing')
       return
     }
 
-    if (!Array.isArray(layout.sections) || layout.sections.length === 0) {
+    const sections = Array.isArray(layout?.sections) ? layout.sections : []
+
+    if (!sections.length) {
       toast.error('Add at least one section before publishing')
       return
     }
@@ -1620,7 +1776,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
           page_id: Number.parseInt(currentPageId, 10),
           name: `Published ${new Date().toLocaleString()}`,
           description: 'Manual publish snapshot',
-          layout,
+          layout: layout || { id: currentPageId, name: 'Untitled Page', sections: [] },
           created_by: 'admin',
         }),
       })
@@ -1760,15 +1916,22 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
     [selectedFooterSlug, updateHeaderFooterAssignment],
   )
 
+  const currentLayoutName = layout?.name || 'Current Page'
+  const currentLayoutSections = Array.isArray(layout?.sections) ? layout.sections : []
+  const safeCurrentLayout: PageLayout =
+    layout && Array.isArray(layout?.sections)
+      ? layout
+      : { id: currentPageId || '', name: currentLayoutName, sections: currentLayoutSections }
+
   const handleRestoreVersion = useCallback(
     (version: { layout?: PageLayout | null }) => {
-      const restoredLayout = version.layout || { id: currentPageId || '', name: layout.name, sections: [] }
+      const restoredLayout = version.layout || { id: currentPageId || '', name: currentLayoutName, sections: [] }
       setBaseLayout(restoredLayout)
       setLayout(restoredLayout)
       setShowHistory(false)
       toast.success('Version restored successfully')
     },
-    [currentPageId, layout.name, setBaseLayout, setLayout],
+    [currentPageId, currentLayoutName, setBaseLayout, setLayout],
   )
 
   const handleLayoutChange = useCallback(
@@ -1812,6 +1975,28 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
     [createPage, setBaseLayout, setCurrentPageId, setLayout],
   )
 
+  const handleAddPageWithPrompt = useCallback(() => {
+    const rawName = window.prompt('Enter page name', 'New Page')
+    if (rawName === null) {
+      return
+    }
+
+    const nextName = rawName.trim() || 'New Page'
+    void handleAddPage(nextName)
+  }, [handleAddPage])
+
+  const handleRenamePage = useCallback(
+    async (pageId: string, nextName: string) => {
+      const result = await renamePage(pageId, nextName)
+      if (result.success) {
+        toast.success(`Page renamed to "${nextName}"`)
+      } else {
+        toast.error(result.error || 'Failed to rename page')
+      }
+    },
+    [renamePage],
+  )
+
   // Initialize component registry
   useEffect(() => {
     initializeComponentRegistry()
@@ -1820,7 +2005,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
   const saveStatusLabel = formatSaveStatus(lastSaved, isAutoSaving, hasPendingChanges)
   const publishedStatusLabel = formatPublishedStatus(lastPublishedAt)
 
-  if (loading && !pages.length && !layout.sections.length) {
+  if (loading && !pages.length && !currentLayoutSections.length) {
     return (
       <div className="cm-page-editor editor-shell flex items-center justify-center min-h-[60vh]">
         <div className="w-full max-w-5xl space-y-4 px-6">
@@ -1853,8 +2038,14 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
             <CanvasToolbar
               pages={pages.map((p) => ({ id: p.id, name: p.name, active: p.active, disabled: p.disabled }))}
               currentPageId={currentPageId}
-              onPageSelect={setCurrentPageId}
-              onAddPage={() => handleAddPage()}
+              onPageSelect={(pageId) => {
+                void handlePageSelect(pageId)
+              }}
+              onAddPage={handleAddPageWithPrompt}
+              onSaveDraft={() => {
+                void handleSave()
+              }}
+              showSaveButton={showSaveButton}
               onAddSection={handleAddSectionClick}
               canUndo={canUndo}
               canRedo={canRedo}
@@ -1866,7 +2057,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
               onDeviceModeChange={setDeviceMode}
               zoom={canvasZoom}
               onZoomChange={setCanvasZoom}
-              sectionCount={layout.sections.length}
+              sectionCount={currentLayoutSections.length}
               saveStatusLabel={saveStatusLabel}
               lastPublishedLabel={publishedStatusLabel}
               headerOptions={headerOptions}
@@ -1886,6 +2077,17 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                 } else {
                   toast.error(`Failed to ${disabled ? 'disable' : 'enable'} page`)
                 }
+              }}
+              onDeletePage={async (pageId) => {
+                const result = await deletePage(pageId)
+                if (result.success) {
+                  toast.success('Page deleted successfully')
+                } else {
+                  toast.error(result.error || 'Failed to delete page')
+                }
+              }}
+              onRenamePage={(pageId, nextName) => {
+                void handleRenamePage(pageId, nextName)
               }}
             />
           </div>
@@ -1957,7 +2159,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
               pages={pages.map((p) => ({ id: p.id, name: p.name, active: p.active, disabled: p.disabled }))}
               currentPageId={currentPageId}
               onPageSelect={setCurrentPageId}
-              onAddPage={() => handleAddPage()}
+              onAddPage={handleAddPageWithPrompt}
               canUndo={canUndo}
               canRedo={canRedo}
               onUndo={undo}
@@ -1975,12 +2177,15 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
               }}
               isPublishing={isPublishing}
               onDeletePage={async (pageId) => {
-                const success = await deletePage(pageId)
-                if (success) {
+                const result = await deletePage(pageId)
+                if (result.success) {
                   toast.success('Page deleted successfully')
                 } else {
-                  toast.error('Failed to delete page')
+                  toast.error(result.error || 'Failed to delete page')
                 }
+              }}
+              onRenamePage={(pageId, nextName) => {
+                void handleRenamePage(pageId, nextName)
               }}
               onDisablePage={async (pageId, disabled) => {
                 const success = await disablePage(pageId, disabled)
@@ -2012,8 +2217,8 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
                 <PropertyPanel
                   selectedComponent={selectedComponent}
                   selectedSectionId={selectedSectionId}
-                  sections={layout.sections}
-                  layout={layout}
+                  sections={currentLayoutSections}
+                  layout={safeCurrentLayout}
                   onComponentUpdate={handleComponentUpdate}
                   onSectionUpdate={handleSectionUpdate} // ✅ This is now the fixed function
                   onClose={() => {
@@ -2058,7 +2263,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
 
         {/* JSON View */}
         {showJsonView && (
-          <JSONView layout={layout} onLayoutChange={handleLayoutChange} isOpen={showJsonView} onToggle={() => setShowJsonView(false)} />
+          <JSONView layout={safeCurrentLayout} onLayoutChange={handleLayoutChange} isOpen={showJsonView} onToggle={() => setShowJsonView(false)} />
         )}
 
         {showHistory && currentPageId ? (
@@ -2068,13 +2273,13 @@ const PageEditor: React.FC<PageEditorProps> = ({ initialLayout, onSave, onCancel
               <div className="history-top">
                 <div>
                   <div className="history-eyebrow">Version History</div>
-                  <div className="history-title">{layout.name || 'Current Page'}</div>
+                  <div className="history-title">{currentLayoutName}</div>
                 </div>
                 <button type="button" className="gbtn ghost" onClick={() => setShowHistory(false)}>
                   Close
                 </button>
               </div>
-              <VersionHistory pageId={currentPageId} currentLayout={layout} onRestore={handleRestoreVersion} className="history-panel" />
+              <VersionHistory pageId={currentPageId} currentLayout={safeCurrentLayout} onRestore={handleRestoreVersion} className="history-panel" />
             </div>
           </div>
         ) : null}

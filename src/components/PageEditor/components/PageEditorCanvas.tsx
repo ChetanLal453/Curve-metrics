@@ -12,6 +12,7 @@ import { useDragDrop } from '../DragDropProvider'
 import { componentRegistry } from '@/lib/componentRegistry'
 import { PageLayout, Section, LayoutComponent } from '@/types/page-editor'
 import { renderRegisteredSection } from '@/lib/sectionRegistry'
+import { NewGrid } from './NewGrid'
 
 interface PageEditorCanvasProps {
   layout: PageLayout
@@ -74,6 +75,7 @@ interface PageEditorCanvasProps {
   isPublishing?: boolean
   onDeletePage?: (pageId: string) => void
   onDisablePage?: (pageId: string, disabled: boolean) => void
+  onRenamePage?: (pageId: string, name: string) => void
 }
 
 // REMOVED: useSectionEditing hook (text editing ke liye tha)
@@ -84,7 +86,10 @@ const usePageActions = (
   onDeletePage?: (pageId: string) => void,
   onDisablePage?: (pageId: string, disabled: boolean) => void,
 ) => {
-  const currentPage = useMemo(() => pages?.find((p) => p.id === currentPageId), [pages, currentPageId])
+  const currentPage = useMemo(
+    () => pages?.find((p) => String(p.id) === String(currentPageId ?? '')),
+    [pages, currentPageId],
+  )
 
   const isCriticalPage = currentPage?.name?.toLowerCase() === 'home'
 
@@ -122,7 +127,6 @@ const ComponentRenderer: React.FC<{
 }> = ({ component, context, isSelected, onComponentSelect, onComponentUpdate, onComponentDelete, layout, setLayout, onDragEnd }) => {
   // Special handling for NewGrid component
   if (component?.type === 'NewGrid') {
-    const { NewGrid } = require('../components/NewGrid')
     return (
       <div className="w-full overflow-hidden" style={{ maxWidth: '100%', minWidth: 0 }}>
         <NewGrid
@@ -149,34 +153,6 @@ const ComponentRenderer: React.FC<{
     )
   }
 
-  // Special handling for Carousel component
-  if (component?.type === 'Carousel') {
-    const Carousel = require('../components/Carousel').default
-    return (
-      <Carousel
-        key={component?.id}
-        id={component?.id}
-        component={component}
-        isEditor={true}
-        onUpdate={onComponentUpdate}
-        sectionId={context.sectionId}
-        containerId={context.containerId}
-        rowId={context.rowId}
-        colId={context.colId}
-        onComponentSelect={onComponentSelect}
-        onDragEnd={onDragEnd} // ✅ Pass through
-        setSelectedComponent={(selected: any) => {
-          onComponentSelect(selected.component, {
-            sectionId: context.sectionId,
-            containerId: context.containerId,
-            rowId: context.rowId,
-            colId: context.colId,
-          })
-        }}
-      />
-    )
-  }
-
   return (
     <DynamicComponent
       key={component?.id}
@@ -197,10 +173,12 @@ const ComponentRenderer: React.FC<{
 // Droppable Column Component
 const DroppableColumn: React.FC<{
   column: any
+  columnIndex: number
   sectionId: string
   containerId: string
   rowId: string
   isSelected: boolean
+  sectionSettings?: Record<string, any>
   selectedComponent: PageEditorCanvasProps['selectedComponent']
   onComponentSelect: PageEditorCanvasProps['onComponentSelect']
   onComponentEdit: PageEditorCanvasProps['onComponentEdit']
@@ -212,10 +190,12 @@ const DroppableColumn: React.FC<{
   isDraggingOverNested: boolean
 }> = ({
   column,
+  columnIndex,
   sectionId,
   containerId,
   rowId,
   isSelected,
+  sectionSettings = {},
   selectedComponent,
   onComponentSelect,
   onComponentEdit,
@@ -227,6 +207,32 @@ const DroppableColumn: React.FC<{
   isDraggingOverNested,
 }) => {
   const droppableId = `column:${sectionId}:${containerId}:${rowId}:${column?.id}`
+  const stickyEnabled = Boolean(sectionSettings?.sticky_enabled)
+  const stickyTargetIndex = Number(sectionSettings?.sticky_column_index ?? 0)
+  const stickyOffset = Number(sectionSettings?.sticky_offset ?? 0)
+  const stickyPosition = String(sectionSettings?.sticky_position || 'top')
+  const isStickyColumn = stickyEnabled && stickyTargetIndex === columnIndex
+
+  const stickyStyle: React.CSSProperties = isStickyColumn
+    ? stickyPosition === 'bottom'
+      ? {
+          position: 'sticky',
+          bottom: `${stickyOffset}px`,
+          top: 'auto',
+          alignSelf: 'flex-end',
+        }
+      : stickyPosition === 'center'
+        ? {
+            position: 'sticky',
+            top: `calc(50vh - ${Math.max(0, stickyOffset)}px)`,
+            alignSelf: 'flex-start',
+          }
+        : {
+            position: 'sticky',
+            top: `${stickyOffset}px`,
+            alignSelf: 'flex-start',
+          }
+    : {}
 
   const { setNodeRef, isOver } = useDroppable({
     id: droppableId,
@@ -255,6 +261,7 @@ const DroppableColumn: React.FC<{
         overflow: 'hidden', // ✅ Change from 'visible' to 'hidden'
         maxWidth: '100%', // ✅ ADD THIS
         minWidth: 0, // ✅ ADD THIS - allows flex children to shrink
+        ...stickyStyle,
       }}
       data-section-droppable-id={droppableId}>
       {/* Column Action Buttons */}
@@ -271,7 +278,7 @@ const DroppableColumn: React.FC<{
         {column?.components
           ?.filter((component: LayoutComponent) => component !== null && component !== undefined && component?.id)
           .map((component: LayoutComponent, index: number) => (
-            <DraggableComponent
+          <DraggableComponent
               key={component?.id}
               component={component}
               index={index}
@@ -376,6 +383,8 @@ export const CanvasToolbar: React.FC<{
   currentPageId: string | null
   onPageSelect: (pageId: string | null) => void
   onAddPage?: () => void
+  onSaveDraft?: () => void
+  showSaveButton?: boolean
   onAddSection: () => void
   canUndo?: boolean
   canRedo?: boolean
@@ -398,12 +407,16 @@ export const CanvasToolbar: React.FC<{
   onFooterChange?: (slug: string) => void
   onPublish?: () => void
   isPublishing?: boolean
+  onDeletePage?: (pageId: string) => void
   onDisablePage?: (pageId: string, disabled: boolean) => void
+  onRenamePage?: (pageId: string, name: string) => void
 }> = ({
   pages,
   currentPageId,
   onPageSelect,
   onAddPage,
+  onSaveDraft,
+  showSaveButton = true,
   onAddSection,
   canUndo = false,
   canRedo = false,
@@ -426,9 +439,11 @@ export const CanvasToolbar: React.FC<{
   onFooterChange,
   onPublish,
   isPublishing = false,
+  onDeletePage,
   onDisablePage,
+  onRenamePage,
 }) => {
-  const { currentPage, handleToggleDisable } = usePageActions(currentPageId, pages, undefined, onDisablePage)
+  const { currentPage, isCriticalPage, handleDelete, handleToggleDisable } = usePageActions(currentPageId, pages, onDeletePage, onDisablePage)
 
   const adjustZoom = (delta: number) => {
     onZoomChange?.(Math.min(150, Math.max(50, zoom + delta)))
@@ -442,8 +457,16 @@ export const CanvasToolbar: React.FC<{
             <button
               key={page.id}
               type="button"
-              onClick={() => onPageSelect(page.id)}
-              className={`pgpill ${currentPageId === page.id ? 'active' : ''}`}
+              onClick={() => onPageSelect(page.id == null ? null : String(page.id))}
+              onDoubleClick={() => {
+                if (!onRenamePage || page.id == null) return
+                const rawName = window.prompt('Rename page', page.name || 'Untitled Page')
+                if (rawName === null) return
+                const nextName = rawName.trim()
+                if (!nextName) return
+                onRenamePage(String(page.id), nextName)
+              }}
+              className={`pgpill ${String(currentPageId ?? '') === String(page.id) ? 'active' : ''}`}
               title={page.disabled ? `${page.name} (Disabled)` : page.name}>
               <span className="dot" style={{ background: page.disabled ? 'var(--am)' : 'var(--gr)' }} />
               <span>{page.name}</span>
@@ -501,6 +524,19 @@ export const CanvasToolbar: React.FC<{
 
         <div className="ed-bar-right">
           <div className="scnt">{sectionCount} sections</div>
+          {showSaveButton ? (
+            <button type="button" onClick={onSaveDraft} className="gbtn primary" disabled={!currentPageId}>
+              Save Draft
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="gbtn danger"
+            disabled={!currentPage || isCriticalPage}
+            title={isCriticalPage ? 'Home page cannot be deleted' : 'Delete current page'}>
+            Delete
+          </button>
           <button type="button" onClick={handleToggleDisable} className="gbtn danger" disabled={!currentPage}>
             {currentPage?.disabled ? 'Enable' : 'Disable'}
           </button>
@@ -572,6 +608,17 @@ export const PageEditorCanvas: React.FC<PageEditorCanvasProps> = ({
   const canvasScrollRef = useRef<HTMLDivElement>(null)
 
   const { isDraggingOverNested } = useDragDrop()
+  const boundedZoom = Math.max(50, Math.min(150, Number.isFinite(zoom) ? zoom : 100))
+  const zoomScale = boundedZoom / 100
+  const deviceWidth = deviceMode === 'mobile' ? 430 : deviceMode === 'tablet' ? 860 : 1200
+  const pageFrameStyle: React.CSSProperties = {
+    width: deviceMode === 'desktop' ? '100%' : `${deviceWidth}px`,
+    minWidth: deviceMode === 'desktop' ? '1200px' : `${deviceWidth}px`,
+    maxWidth: deviceMode === 'desktop' ? 'none' : '100%',
+    transform: `scale(${zoomScale})`,
+    transformOrigin: 'top center',
+    margin: '0 auto',
+  }
 
   useEffect(() => {
     canvasScrollRef.current?.scrollTo({ top: 0, left: 0 })
@@ -600,6 +647,26 @@ export const PageEditorCanvas: React.FC<PageEditorCanvasProps> = ({
 
       const hasRows = section?.container?.rows?.length > 0
       const isDynamicSection = Boolean(section?.type && section.type !== 'custom')
+      const sectionSettings = (section?.settings || {}) as Record<string, any>
+
+      const getColumnTemplate = (columns: any[]) => {
+        const safeColumns = Array.isArray(columns) ? columns : []
+        if (!safeColumns.length) {
+          return '1fr'
+        }
+
+        const widths = safeColumns.map((column) => {
+          const width = Number(column?.width)
+          return Number.isFinite(width) && width > 0 ? width : Math.round(100 / safeColumns.length)
+        })
+        const total = widths.reduce((sum, width) => sum + width, 0)
+
+        if (total <= 0) {
+          return `repeat(${safeColumns.length}, minmax(0, 1fr))`
+        }
+
+        return widths.map((width) => `${Math.max(10, width)}fr`).join(' ')
+      }
 
       return (
         <DroppableSection
@@ -636,19 +703,21 @@ export const PageEditorCanvas: React.FC<PageEditorCanvasProps> = ({
                   key={row?.id}
                   className="grid gap-4 mb-4"
                   style={{
-                    gridTemplateColumns: `repeat(${row?.columns?.length || 1}, minmax(0, 1fr))`, // ✅ Use minmax(0, 1fr)
+                    gridTemplateColumns: getColumnTemplate(row?.columns || []),
                     width: '100%',
                     maxWidth: '100%',
                     overflow: 'visible',
                     minWidth: 0, // ✅ ADD THIS
                   }}>
-                  {row?.columns?.map((column) => (
+                  {row?.columns?.map((column, columnIndex) => (
                     <DroppableColumn
                       key={column?.id}
                       column={column}
+                      columnIndex={columnIndex}
                       sectionId={section?.id}
                       containerId={section?.container?.id}
                       rowId={row?.id}
+                      sectionSettings={sectionSettings}
                       isSelected={selectedSectionId === section?.id}
                       selectedComponent={selectedComponent}
                       onComponentSelect={onComponentSelect}
@@ -696,7 +765,8 @@ export const PageEditorCanvas: React.FC<PageEditorCanvasProps> = ({
         className={`canvas-scroll flex-1 min-h-0 ${showGrid ? '' : 'grid-off'}`}>
         <div
           id="page-frame"
-          className={`page-frame canvas-frame ${isWide ? 'wide' : ''} ${deviceMode === 'mobile' ? 'mobile-view' : ''} ${deviceMode === 'tablet' ? 'tablet-view' : ''} ${showGrid ? '' : 'grid-off'}`}>
+          className={`page-frame canvas-frame ${isWide ? 'wide' : ''} ${deviceMode === 'mobile' ? 'mobile-view' : ''} ${deviceMode === 'tablet' ? 'tablet-view' : ''} ${showGrid ? '' : 'grid-off'}`}
+          style={pageFrameStyle}>
           <PageSectionsDroppable layout={layout} renderSection={renderSection} />
         </div>
         <CanvasActions onAddSection={onAddSection} />
@@ -760,4 +830,3 @@ const ActionButton: React.FC<{
     {label}
   </button>
 )
-

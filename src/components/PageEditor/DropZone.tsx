@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo } from 'react'
+import React, { useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { DropZone as DropZoneType } from '@/types/page-editor'
 import { useDragDrop } from './DragDropProvider'
@@ -24,14 +24,6 @@ export const DropZone: React.FC<DropZoneProps> = ({
 
   // 🆕 FIX: Enhanced validation logic with type assertion
   const isValidDropZone = useMemo(() => {
-    // For carousel drop zones, check if we have the special carousel dropzone
-    if (zone.type === 'carousel') {
-      return validDropZones.some(validZone => 
-        validZone.type === 'carousel' && 
-        (validZone.id === 'carousel-dropzone' || validZone.id === zone.id)
-      )
-    }
-    
     // For grid-cell drop zones, check if we have the special grid-cell dropzone
     if (zone.type === 'grid-cell') {
       return validDropZones.some(validZone => 
@@ -62,20 +54,6 @@ export const DropZone: React.FC<DropZoneProps> = ({
       zoneId: zone.id
     }
   })
-
-  // 🆕 FIX: Log drop zone status for debugging
-  useEffect(() => {
-    if (zone.type === 'carousel') {
-      console.log('🎯 Carousel DropZone Status:', {
-        id: zone.id,
-        isValid: isValidDropZone,
-        isDragging: isDragging,
-        hasValidItem: isDraggingValidItem,
-        isOver: isOver,
-        validDropZones: validDropZones
-      })
-    }
-  }, [zone.type, zone.id, isValidDropZone, isDragging, isDraggingValidItem, isOver, validDropZones])
 
   return (
     <div
@@ -127,39 +105,6 @@ export const DropZone: React.FC<DropZoneProps> = ({
         <div className="min-h-20 border-2 border-dashed border-blue-200 rounded-lg bg-blue-25"></div>
       )}
     </div>
-  )
-}
-
-// Specialized carousel drop zone with enhanced validation
-export const CarouselDropZone: React.FC<{
-  carouselId: string;
-  children: React.ReactNode;
-  placeholder?: React.ReactNode;
-}> = ({ carouselId, children, placeholder }) => {
-  console.log('🎯 CarouselDropZone rendered:', carouselId);
-  
-  return (
-    <DropZone
-      zone={{
-        type: 'carousel',
-        id: `carousel-${carouselId}`,
-        accepts: ['component'] as any, // 🆕 FIX: Type assertion
-        index: 0
-      }}
-      className="min-h-24"
-      placeholder={placeholder || (
-        <div className="flex flex-col items-center gap-2 py-4">
-          <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center">
-            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-            </svg>
-          </div>
-          <p className="text-xs text-gray-500">Drop components here</p>
-        </div>
-      )}
-    >
-      {children}
-    </DropZone>
   )
 }
 

@@ -2,13 +2,13 @@ import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import pool from '../../../../lib/db.js'
 import { requireAdmin } from '../../../../lib/require-admin.js'
-import { databaseErrorResponse, parseJsonRow, tableExists, missingTableResponse } from '../../_utils/crud.js'
+import { databaseErrorResponse, getExistingColumns, parseJsonRow, tableExists, missingTableResponse } from '../../_utils/crud.js'
 
 function normalizeVersionRow(row) {
   return {
     id: row.id,
     page_id: row.page_id,
-    version_name: row.version_name || `Version ${row.version_number || 1}`,
+    version_name: row.version_name || row.name || `Version ${row.version_number || 1}`,
     version_number: Number(row.version_number || 1),
     layout: row.layout || row.content || {},
     description: row.description || row.notes || '',
@@ -62,36 +62,49 @@ export async function POST(request) {
     const versionId = body?.id || randomUUID()
     const serializedLayout = JSON.stringify(layout)
 
+    const versionColumns = await getExistingColumns('page_versions')
+    const valuesByColumn = {
+      id: versionId,
+      page_id: pageId,
+      version_name: versionName,
+      name: versionName,
+      version_number: versionNumber,
+      layout: serializedLayout,
+      content: serializedLayout,
+      description,
+      notes: description,
+      created_by: createdBy,
+    }
+    const insertFields = Object.keys(valuesByColumn).filter((field) => versionColumns.includes(field))
+    const insertValues = insertFields.map((field) => valuesByColumn[field])
+
+    if (!insertFields.length) {
+      return NextResponse.json({ success: false, error: 'page_versions schema is not supported' }, { status: 500 })
+    }
+
     await pool.query(
-      `INSERT INTO page_versions (
-        id,
-        page_id,
-        version_name,
-        version_number,
-        content,
-        layout,
-        description,
-        notes,
-        created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [versionId, pageId, versionName, versionNumber, serializedLayout, serializedLayout, description, description, createdBy],
+      `INSERT INTO page_versions (${insertFields.join(', ')}) VALUES (${insertFields.map(() => '?').join(', ')})`,
+      insertValues,
     )
 
+    const selectFields = [
+      'id',
+      'page_id',
+      versionColumns.includes('version_name') ? 'version_name' : versionColumns.includes('name') ? 'name' : 'NULL AS version_name',
+      'version_number',
+      versionColumns.includes('layout') ? 'layout' : 'NULL AS layout',
+      versionColumns.includes('content') ? 'content' : 'NULL AS content',
+      versionColumns.includes('description') ? 'description' : 'NULL AS description',
+      versionColumns.includes('notes') ? 'notes' : 'NULL AS notes',
+      versionColumns.includes('created_by') ? 'created_by' : 'NULL AS created_by',
+      'created_at',
+    ]
+
     const [rows] = await pool.query(
-      `SELECT
-        id,
-        page_id,
-        version_name,
-        version_number,
-        content,
-        layout,
-        description,
-        notes,
-        created_by,
-        created_at
-      FROM page_versions
-      WHERE id = ?
-      LIMIT 1`,
+      `SELECT ${selectFields.join(', ')}
+       FROM page_versions
+       WHERE id = ?
+       LIMIT 1`,
       [versionId],
     )
 

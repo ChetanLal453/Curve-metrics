@@ -1,14 +1,12 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef, memo, forwardRef, useMemo } from 'react'
-import dynamic from 'next/dynamic'
 import { LayoutComponent } from '@/types/page-editor'
 import { componentRegistry } from '@/lib/componentRegistry'
 import AdvancedCardComponent from './components/AdvancedCardComponent'
 import AdvancedImageComponent from './components/AdvancedImageComponent'
 import AdvancedParagraph from './components/AdvancedParagraph'
 import { NewGrid } from './components/NewGrid'
-import Carousel from './components/Carousel'
 import SwiperContainer from './components/SwiperContainer'
 import AdvancedList, { advancedListDefaultProps } from './components/AdvancedList'
 import AdvancedHeading from './components/AdvancedHeading'
@@ -16,10 +14,6 @@ import AdvancedButton, { advancedButtonDefaultProps } from './components/Advance
 import AdvancedAccordion, { advancedAccordionDefaultProps } from './components/AdvancedAccordion'
 import { sanitizeHtml } from '@/lib/sanitize-markup'
 
-const DynamicCarousel = dynamic(() => import('./components/Carousel').then((mod) => mod.default), {
-  ssr: false,
-  loading: () => <div className="p-4 text-center">Loading carousel...</div>,
-})
 
 // In the DynamicComponentInner function, update the props interface:
 interface DynamicComponentProps {
@@ -132,31 +126,375 @@ const DynamicQuote: React.FC<{ component: LayoutComponent; onUpdate: (props: any
   )
 }
 
+const DEFAULT_VIDEO_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+
+type ResolvedVideoSource =
+  | { kind: 'youtube'; src: string }
+  | { kind: 'vimeo'; src: string }
+  | { kind: 'mp4'; src: string }
+  | { kind: 'embed'; src: string }
+
+const withQueryParams = (urlString: string, params: Record<string, string>): string => {
+  try {
+    const parsed = new URL(urlString)
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === '' || value === undefined || value === null) {
+        parsed.searchParams.delete(key)
+        return
+      }
+      parsed.searchParams.set(key, value)
+    })
+    return parsed.toString()
+  } catch {
+    return urlString
+  }
+}
+
+const applyAlphaToColor = (colorValue: string, alphaPercent: number): string => {
+  const alpha = Math.max(0, Math.min(100, alphaPercent)) / 100
+  const trimmed = (colorValue || '').trim()
+  const shortHexMatch = trimmed.match(/^#([0-9a-fA-F]{3})$/)
+  const longHexMatch = trimmed.match(/^#([0-9a-fA-F]{6})$/)
+
+  if (shortHexMatch?.[1]) {
+    const [r, g, b] = shortHexMatch[1].split('').map((char) => parseInt(`${char}${char}`, 16))
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+
+  if (longHexMatch?.[1]) {
+    const hex = longHexMatch[1]
+    const r = parseInt(hex.slice(0, 2), 16)
+    const g = parseInt(hex.slice(2, 4), 16)
+    const b = parseInt(hex.slice(4, 6), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+
+  return trimmed || `rgba(255, 255, 255, ${alpha})`
+}
+
+const extractYouTubeId = (urlString: string): string | null => {
+  const trimmed = (urlString || '').trim()
+  if (!trimmed) return null
+
+  const shortMatch = trimmed.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/)
+  if (shortMatch?.[1]) return shortMatch[1]
+
+  const embedMatch = trimmed.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/)
+  if (embedMatch?.[1]) return embedMatch[1]
+
+  const shortsMatch = trimmed.match(/youtube\.com\/shorts\/([A-Za-z0-9_-]{6,})/)
+  if (shortsMatch?.[1]) return shortsMatch[1]
+
+  try {
+    const parsed = new URL(trimmed)
+    const watchId = parsed.searchParams.get('v')
+    if (watchId) return watchId
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+const extractVimeoId = (urlString: string): string | null => {
+  const trimmed = (urlString || '').trim()
+  if (!trimmed) return null
+
+  const match = trimmed.match(/vimeo\.com\/(?:video\/)?(\d{5,})/)
+  return match?.[1] || null
+}
+
+const resolveVideoSource = (
+  rawSrc: string,
+  sourceType: 'auto' | 'youtube' | 'vimeo' | 'mp4',
+  options: { autoplay: boolean; muted: boolean; loop: boolean; controls: boolean },
+): ResolvedVideoSource => {
+  const src = (rawSrc || DEFAULT_VIDEO_URL).trim()
+  const lowerSrc = src.toLowerCase()
+
+  const isMp4Url = lowerSrc.endsWith('.mp4') || lowerSrc.includes('.mp4?')
+  const shouldUseMp4 = sourceType === 'mp4' || (sourceType === 'auto' && isMp4Url)
+  if (shouldUseMp4) {
+    return { kind: 'mp4', src }
+  }
+
+  const isYoutubeUrl = lowerSrc.includes('youtube.com') || lowerSrc.includes('youtu.be')
+  if (sourceType === 'youtube' || (sourceType === 'auto' && isYoutubeUrl)) {
+    const youtubeId = extractYouTubeId(src)
+    if (youtubeId) {
+      const youtubeEmbed = `https://www.youtube.com/embed/${youtubeId}`
+      return {
+        kind: 'youtube',
+        src: withQueryParams(youtubeEmbed, {
+          autoplay: options.autoplay ? '1' : '0',
+          mute: options.muted ? '1' : '0',
+          controls: options.controls ? '1' : '0',
+          loop: options.loop ? '1' : '0',
+          playlist: options.loop ? youtubeId : '',
+          rel: '0',
+          modestbranding: '1',
+        }),
+      }
+    }
+  }
+
+  const isVimeoUrl = lowerSrc.includes('vimeo.com')
+  if (sourceType === 'vimeo' || (sourceType === 'auto' && isVimeoUrl)) {
+    const vimeoId = extractVimeoId(src)
+    if (vimeoId) {
+      const vimeoEmbed = `https://player.vimeo.com/video/${vimeoId}`
+      return {
+        kind: 'vimeo',
+        src: withQueryParams(vimeoEmbed, {
+          autoplay: options.autoplay ? '1' : '0',
+          muted: options.muted ? '1' : '0',
+          loop: options.loop ? '1' : '0',
+          controls: options.controls ? '1' : '0',
+          title: '0',
+          byline: '0',
+          portrait: '0',
+        }),
+      }
+    }
+  }
+
+  return { kind: 'embed', src }
+}
+
 const DynamicVideo: React.FC<{ component: LayoutComponent; onUpdate: (props: any) => void }> = ({ component, onUpdate }) => {
+  const props = component.props || {}
   const [editing, setEditing] = useState(false)
+  const [draftUrl, setDraftUrl] = useState(props.src || DEFAULT_VIDEO_URL)
+  const [localPlaying, setLocalPlaying] = useState(false)
+  const [localProgress, setLocalProgress] = useState(0)
+  const [localTimeLabel, setLocalTimeLabel] = useState('0:00 / 0:00')
+  const htmlVideoRef = useRef<HTMLVideoElement | null>(null)
+
+  const autoplay = Boolean(props.autoplay)
+  const muted = Boolean(props.muted)
+  const loop = Boolean(props.loop)
+  const controls = props.controls !== false
+  const sourceType = (props.sourceType || 'auto') as 'auto' | 'youtube' | 'vimeo' | 'mp4'
+  const showOverlay = props.showOverlay !== false
+  const showPreviewChrome = props.showPreviewChrome !== false
+  const previewProgress = Number.isFinite(Number(props.previewProgress)) ? Number(props.previewProgress) : 35
+  const borderOpacity = Number.isFinite(Number(props.borderOpacity)) ? Number(props.borderOpacity) : 13
+  const resolvedSource = useMemo(
+    () =>
+      resolveVideoSource(props.src || DEFAULT_VIDEO_URL, sourceType, {
+        autoplay,
+        muted,
+        loop,
+        controls,
+      }),
+    [props.src, sourceType, autoplay, muted, loop, controls],
+  )
+
+  useEffect(() => {
+    setDraftUrl(props.src || DEFAULT_VIDEO_URL)
+  }, [props.src])
+
+  const formatTime = (seconds: number): string => {
+    if (!Number.isFinite(seconds)) return '0:00'
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const toggleVideoPlayState = () => {
+    if (resolvedSource.kind !== 'mp4' || !htmlVideoRef.current) return
+    if (htmlVideoRef.current.paused) {
+      void htmlVideoRef.current.play()
+    } else {
+      htmlVideoRef.current.pause()
+    }
+  }
+
+  const commitUrl = () => {
+    const cleaned = draftUrl.trim() || DEFAULT_VIDEO_URL
+    onUpdate({ ...props, src: cleaned })
+    setEditing(false)
+  }
 
   return (
-    <div className="relative">
-      {editing ? (
+    <div style={{ width: props.width || '100%', maxWidth: props.maxWidth || '100%', margin: props.margin || '0 auto' }}>
+      {editing && (
         <input
           type="text"
-          value={component.props?.src || 'https://www.youtube.com/embed/dQw4w9WgXcQ'}
-          onChange={(e) => onUpdate({ ...component.props, src: e.target.value })}
-          onBlur={() => setEditing(false)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+          value={draftUrl}
+          onChange={(event) => setDraftUrl(event.target.value)}
+          onBlur={commitUrl}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commitUrl()
+            if (event.key === 'Escape') {
+              setDraftUrl(props.src || DEFAULT_VIDEO_URL)
               setEditing(false)
             }
           }}
           className="w-full p-2 border rounded focus:outline-none focus:border-blue-400 mb-2"
-          placeholder="Enter video URL..."
+          placeholder="Enter YouTube, Vimeo, or MP4 URL..."
           autoFocus
         />
-      ) : (
-        <div className="cursor-pointer hover:bg-gray-100 p-2 rounded border-2 border-dashed border-gray-300" onClick={() => setEditing(true)}>
-          <iframe src={component.props?.src || 'https://www.youtube.com/embed/dQw4w9WgXcQ'} className="w-full aspect-video" allowFullScreen />
-        </div>
       )}
+
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          aspectRatio: props.aspectRatio || '16 / 9',
+          minHeight: '160px',
+          background: '#22263a',
+          borderRadius: `${props.borderRadius ?? 10}px`,
+          border: `1px solid ${applyAlphaToColor(props.borderColor || '#ffffff', borderOpacity)}`,
+          overflow: 'hidden',
+        }}>
+        {resolvedSource.kind === 'mp4' ? (
+          <video
+            ref={htmlVideoRef}
+            src={resolvedSource.src}
+            autoPlay={autoplay}
+            muted={muted || autoplay}
+            controls={controls}
+            loop={loop}
+            playsInline
+            onPlay={() => setLocalPlaying(true)}
+            onPause={() => setLocalPlaying(false)}
+            onTimeUpdate={(event) => {
+              const current = event.currentTarget.currentTime
+              const duration = event.currentTarget.duration || 0
+              const percent = duration > 0 ? (current / duration) * 100 : 0
+              setLocalProgress(percent)
+              setLocalTimeLabel(`${formatTime(current)} / ${formatTime(duration)}`)
+            }}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: props.objectFit || 'cover',
+              display: 'block',
+            }}
+          />
+        ) : (
+          <iframe
+            src={resolvedSource.src}
+            title={props.title || 'Video'}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+              display: 'block',
+            }}
+          />
+        )}
+
+        {showOverlay && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: `linear-gradient(135deg, rgba(124,109,250,${(props.overlayStrength ?? 10) / 100}), rgba(0,0,0,0.5))`,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
+
+        {showPreviewChrome && (
+          <>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                toggleVideoPlayState()
+              }}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '48px',
+                height: '48px',
+                background: 'rgba(255,255,255,0.15)',
+                border: '2px solid rgba(255,255,255,0.3)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backdropFilter: 'blur(4px)',
+                zIndex: 2,
+                cursor: resolvedSource.kind === 'mp4' ? 'pointer' : 'default',
+                pointerEvents: resolvedSource.kind === 'mp4' ? 'auto' : 'none',
+              }}
+              aria-label={localPlaying ? 'Pause video' : 'Play video'}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                {localPlaying && resolvedSource.kind === 'mp4' ? (
+                  <>
+                    <rect x="6" y="5" width="4" height="14"></rect>
+                    <rect x="14" y="5" width="4" height="14"></rect>
+                  </>
+                ) : (
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                )}
+              </svg>
+            </button>
+
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                padding: '10px 14px',
+                background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                zIndex: 2,
+                pointerEvents: 'none',
+              }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              <div style={{ flex: 1, height: '3px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${Math.max(0, Math.min(100, resolvedSource.kind === 'mp4' ? localProgress : previewProgress))}%`,
+                    height: '100%',
+                    background: props.accentColor || '#7c6dfa',
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.7)', fontFamily: "'DM Mono', monospace" }}>
+                {resolvedSource.kind === 'mp4' ? localTimeLabel : props.previewTime || '1:24 / 4:05'}
+              </div>
+            </div>
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            setEditing((value) => !value)
+          }}
+          style={{
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            zIndex: 3,
+            borderRadius: '6px',
+            border: '1px solid rgba(255,255,255,0.2)',
+            background: 'rgba(0,0,0,0.45)',
+            color: '#d5d9e5',
+            fontSize: '11px',
+            fontWeight: 600,
+            padding: '4px 8px',
+            lineHeight: 1,
+            cursor: 'pointer',
+          }}>
+          {editing ? 'Done' : 'Edit URL'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -1786,6 +2124,128 @@ const DynamicComponentInner = memo(
         case 'divider':
           return <DynamicDivider component={component} onUpdate={handleUpdate} />
 
+        case 'container':
+        case 'Container': {
+          const containerProps = {
+            maxWidth: propsToUse?.maxWidth || '960px',
+            padding: propsToUse?.padding || '20px',
+            margin: propsToUse?.margin || '0 auto',
+            backgroundColor: propsToUse?.backgroundColor || 'transparent',
+          }
+
+          return (
+            <div
+              className={`component-edit-shell container-shell relative ${isSelected ? 'is-selected' : ''}`}
+              onClick={handleClick}
+              style={{ width: '100%' }}>
+              <div
+                style={{
+                  width: '100%',
+                  borderRadius: '12px',
+                  border: '1px solid var(--canvas-border, rgba(255,255,255,0.07))',
+                  overflow: 'hidden',
+                  background: 'var(--canvas-surface, #13161e)',
+                }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '12px 16px',
+                    background: 'var(--canvas-surface2, #1a1d28)',
+                    borderBottom: '1px solid var(--canvas-border, rgba(255,255,255,0.07))',
+                    fontFamily: "'DM Sans', system-ui, sans-serif",
+                  }}>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                      color: 'var(--canvas-accent2, #a594ff)',
+                      background: 'var(--canvas-accentbg, rgba(124,109,250,0.12))',
+                      border: '1px solid rgba(124,109,250,0.2)',
+                      padding: '2px 8px',
+                      borderRadius: '20px',
+                    }}>
+                    Layout
+                  </span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--canvas-text, #e8eaf0)' }}>Container</span>
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      fontSize: '11.5px',
+                      color: 'var(--canvas-text3, #5a5f7a)',
+                      fontFamily: "'DM Mono', monospace",
+                    }}>
+                    {`max-width: ${containerProps.maxWidth}`}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    padding: '32px 40px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: '120px',
+                    backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)',
+                    backgroundSize: '20px 20px',
+                  }}>
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '420px',
+                      border: '2px dashed rgba(124,109,250,0.3)',
+                      borderRadius: '10px',
+                      padding: containerProps.padding,
+                      margin: containerProps.margin,
+                      position: 'relative',
+                      backgroundColor: containerProps.backgroundColor,
+                    }}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '-11px',
+                        left: '14px',
+                        background: 'var(--canvas-accent, #7c6dfa)',
+                        color: '#fff',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '1px 8px',
+                        borderRadius: '10px',
+                        letterSpacing: '0.04em',
+                      }}>
+                      Container
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      {[1, 2].map((index) => (
+                        <div
+                          key={index}
+                          style={{
+                            flex: 1,
+                            height: '52px',
+                            background: 'var(--canvas-surface3, #222533)',
+                            border: '1px solid var(--canvas-border2, rgba(255,255,255,0.13))',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '11px',
+                            color: 'var(--canvas-text3, #5a5f7a)',
+                          }}>
+                          Child block
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        }
+
         case 'swipercontainer':
   return (
     <SwiperContainer
@@ -1915,28 +2375,6 @@ const DynamicComponentInner = memo(
               parentGridId={parentGridId}
               // Pass cells directly as props for immediate rendering
               cells={propsToUse?.cells}
-            />
-          )
-
-        case 'carousel':
-          return (
-            <Carousel
-              {...propsToUse}
-              component={component}
-              onUpdate={handleUpdate}
-              onSelect={handleSelectForComponents}
-              onComponentSelect={onComponentSelect}
-              onComponentUpdate={onComponentUpdate}
-              sectionId={sectionId}
-              containerId={containerId}
-              rowId={rowId}
-              colId={colId}
-              carouselId={carouselId}
-              slideIndex={slideIndex}
-              setSelectedComponent={setSelectedComponent}
-              deleteComponent={deleteComponent}
-              parentComponentId={parentComponentId}
-              parentGridId={parentGridId}
             />
           )
 

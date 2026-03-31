@@ -77,12 +77,47 @@ export const DroppableSection: React.FC<DroppableSectionProps> = ({
     display: sectionSettings?.visible === false ? 'none' : 'block',
   }
 
-  // ✅✅✅ CRITICAL FIX: Sticky should be applied to CONTENT AREA, not header
+  const containerType = String(sectionSettings?.containerType || 'boxed')
+  const maxWidth = Number(sectionSettings?.maxWidth || 1200)
+  const sideSpacing = Number(sectionSettings?.sideSpacing ?? 20)
+  const toCssLength = (value: unknown): string | undefined => {
+    if (value === undefined || value === null || value === '') {
+      return undefined
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return `${value}px`
+    }
+
+    const trimmed = String(value).trim()
+    if (!trimmed) {
+      return undefined
+    }
+
+    return /^-?\d+(\.\d+)?$/.test(trimmed) ? `${trimmed}px` : trimmed
+  }
+
+  const resolvedSideSpacing = containerType === 'full-width' ? 0 : Math.max(0, sideSpacing)
+  const resolvedMaxWidth =
+    containerType === 'full-width' ? '100%' : containerType === 'fluid' ? '100%' : `${Math.max(320, maxWidth)}px`
+  const resolvedSectionPadding = toCssLength(sectionSettings?.padding)
+  const horizontalPadding = resolvedSectionPadding ? `max(${resolvedSectionPadding}, ${resolvedSideSpacing}px)` : `${resolvedSideSpacing}px`
+
+  // ✅ Apply container width settings to the section content shell.
   const contentAreaStyle: React.CSSProperties = {
-    // Apply sticky settings to CONTENT AREA
-    position: sectionSettings?.sticky_enabled ? 'sticky' : 'static',
-    top: sectionSettings?.sticky_enabled ? (sectionSettings.sticky_offset || 0) + 'px' : undefined,
-    zIndex: sectionSettings?.sticky_enabled ? 10 : 'auto',
+    position: 'relative',
+    zIndex: 'auto',
+    width: '100%',
+    maxWidth: resolvedMaxWidth,
+    margin: containerType === 'full-width' ? '0' : '0 auto',
+    paddingLeft: horizontalPadding,
+    paddingRight: horizontalPadding,
+    backgroundColor: sectionSettings?.backgroundColor || 'transparent',
+    borderRadius:
+      toCssLength(sectionSettings?.borderRadius),
+    opacity:
+      sectionSettings?.opacity !== undefined ? Math.max(0, Math.min(100, Number(sectionSettings.opacity))) / 100 : undefined,
+    ...((sectionSettings?.customCSS ? parseCustomCSS(sectionSettings.customCSS) : {}) as React.CSSProperties),
   }
 
   // Helper function to parse custom CSS
@@ -203,7 +238,6 @@ export const DroppableSection: React.FC<DroppableSectionProps> = ({
         style={{
           ...contentAreaStyle,
           overflow: 'visible',
-          padding: sectionSettings?.padding ? (typeof sectionSettings.padding === 'number' ? `${sectionSettings.padding}px` : sectionSettings.padding) : undefined,
         }}>
         {children}
       </div>

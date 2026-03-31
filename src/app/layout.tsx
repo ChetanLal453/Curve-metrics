@@ -43,7 +43,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
         {/* END OF FONTAWESOME CDN */}
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <NextTopLoader color="#1e84c4" showSpinner={false} />
         <div id="__next_splash">
           <AppProvidersWrapper>{children}</AppProvidersWrapper>

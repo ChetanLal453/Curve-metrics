@@ -9,7 +9,7 @@ interface MediaItem {
   id: string
   filename: string
   url: string
-  type: string
+  type?: string
   size: number
   uploaded_at: string
   alt?: string
@@ -34,16 +34,29 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null)
   const [showUploader, setShowUploader] = useState(false)
 
+  const getSafeType = (type?: string) => (typeof type === 'string' ? type : '')
+  const isImageType = (type?: string) => getSafeType(type).toLowerCase().startsWith('image')
+
   useEffect(() => {
     fetchMediaItems()
   }, [])
 
+  useEffect(() => {
+    setSelectedItem(selectedMedia || null)
+  }, [selectedMedia])
   const fetchMediaItems = async () => {
     try {
       const response = await fetch('/api/media/list', { credentials: 'include' })
       const data = await response.json()
       if (data.success) {
-        setMediaItems(data.media)
+        const normalizedMedia = Array.isArray(data.media)
+          ? data.media.map((item: any) => ({
+              ...item,
+              type: item?.type || item?.mimeType || item?.fileType || '',
+              uploaded_at: item?.uploaded_at || item?.created_at || new Date().toISOString(),
+            }))
+          : []
+        setMediaItems(normalizedMedia)
       }
     } catch (error) {
       console.error('Error fetching media:', error)
@@ -99,40 +112,51 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   }
 
   const filteredMedia = mediaItems.filter(item =>
-    item.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.filename?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
   )
-
   return (
-    <div className={`flex h-full ${className}`}>
-      {/* Main content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Media Library</h2>
-            <button
-              onClick={() => setShowUploader(!showUploader)}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              {showUploader ? 'Cancel Upload' : 'Upload Media'}
-            </button>
+    <div className={`media-library-shell ${className}`.trim()}>
+      <div className="media-library-main">
+        <div className="media-library-top">
+          <div>
+            <div className="media-eyebrow">Assets</div>
+            <h2 className="media-title">Media Library</h2>
+            <p className="media-subtitle">Upload, preview, search, and reuse media across the editor.</p>
           </div>
 
-          {/* Search */}
-          <div className="flex gap-2">
+          <button
+            onClick={() => setShowUploader(!showUploader)}
+            className={`media-button media-button-primary ${showUploader ? 'is-active' : ''}`}>
+            {showUploader ? 'Close uploader' : 'Upload media'}
+          </button>
+        </div>
+
+        <div className="media-toolbar">
+          <div className="media-stat">
+            <span className="media-stat-label">Total</span>
+            <span className="media-stat-value">{mediaItems.length}</span>
+          </div>
+          <div className="media-stat">
+            <span className="media-stat-label">Images</span>
+            <span className="media-stat-value">{mediaItems.filter((item) => isImageType(item.type)).length}</span>
+          </div>
+          <div className="media-stat">
+            <span className="media-stat-label">Filtered</span>
+            <span className="media-stat-value">{filteredMedia.length}</span>
+          </div>
+          <div className="media-search">
             <input
               type="text"
-              placeholder="Search media..."
+              placeholder="Search media, tags, filename..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="media-input"
             />
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="media-library-content">
           {showUploader ? (
             <MediaUploader
               onUpload={handleUpload}
@@ -153,22 +177,19 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
         </div>
       </div>
 
-      {/* Details panel */}
       {selectedItem && (
-        <div className="w-80 border-l border-gray-200">
+        <aside className="media-library-aside">
           <MediaDetails
             media={selectedItem}
             onUpdate={(updatedMedia) => {
-              setMediaItems(prev =>
-                prev.map(item =>
-                  item.id === updatedMedia.id ? updatedMedia : item
-                )
+              setMediaItems((prev) =>
+                prev.map((item) => (item.id === updatedMedia.id ? updatedMedia : item)),
               )
               setSelectedItem(updatedMedia)
             }}
             onClose={() => setSelectedItem(null)}
           />
-        </div>
+        </aside>
       )}
     </div>
   )

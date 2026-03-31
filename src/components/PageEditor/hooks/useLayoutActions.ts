@@ -36,6 +36,57 @@ const createNewGridComponent = (): LayoutComponent => {
   }
 }
 
+// 🔹 Safe layout clone for state updaters
+const cloneLayoutForUpdate = (layout?: PageLayout): PageLayout => {
+  const safeLayout: PageLayout =
+    layout && typeof layout === 'object' && Array.isArray(layout.sections)
+      ? layout
+      : {
+          id: '',
+          name: 'Untitled Page',
+          sections: [],
+        }
+
+  return JSON.parse(JSON.stringify(safeLayout)) as PageLayout
+}
+
+type ComponentLocation = {
+  sectionIndex: number
+  rowIndex: number
+  colIndex: number
+  componentIndex: number
+  component: LayoutComponent
+}
+
+const findDirectComponentLocation = (layout: PageLayout, componentId: string): ComponentLocation | null => {
+  for (let sectionIndex = 0; sectionIndex < layout.sections.length; sectionIndex += 1) {
+    const section = layout.sections[sectionIndex]
+    const rows = section.container?.rows || []
+
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex]
+      const columns = row?.columns || []
+
+      for (let colIndex = 0; colIndex < columns.length; colIndex += 1) {
+        const column = columns[colIndex]
+        const componentIndex = (column?.components || []).findIndex((component) => component?.id === componentId)
+
+        if (componentIndex !== -1) {
+          return {
+            sectionIndex,
+            rowIndex,
+            colIndex,
+            componentIndex,
+            component: column.components[componentIndex],
+          }
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 // 🔹 Enhanced find component that searches EVERYWHERE including swiper slides
 const findComponentEverywhere = (layout: PageLayout, id: string): LayoutComponent | null => {
   // Recursive search function
@@ -160,7 +211,7 @@ export const useLayoutActions = (
       })
 
       setLayout((prevLayout) => {
-        const newLayout = JSON.parse(JSON.stringify(prevLayout))
+        const newLayout = cloneLayoutForUpdate(prevLayout)
         let componentUpdated = false
 
         // 🆕 CRITICAL: Search in SWIPER SLIDES
@@ -389,6 +440,66 @@ export const useLayoutActions = (
 
       console.log('🔧 Using component type:', componentType)
 
+      // Reorder existing components when dropping one sortable item onto another.
+      if (
+        draggedItem?.data?.sortable &&
+        typeof dropZoneId === 'string' &&
+        dropZoneId.startsWith('component:') &&
+        draggedItem?.id
+      ) {
+        const sourceComponentId = String(draggedItem.id)
+        const targetComponentId = String(dropZoneId).split(':')[1] || ''
+
+        if (sourceComponentId && targetComponentId && sourceComponentId !== targetComponentId) {
+          setLayout((prevLayout) => {
+            const newLayout = cloneLayoutForUpdate(prevLayout)
+            const sourceLocation = findDirectComponentLocation(newLayout, sourceComponentId)
+            const targetLocation = findDirectComponentLocation(newLayout, targetComponentId)
+
+            if (!sourceLocation || !targetLocation) {
+              return prevLayout
+            }
+
+            const sourceColumn = newLayout.sections[sourceLocation.sectionIndex]?.container?.rows?.[sourceLocation.rowIndex]?.columns?.[sourceLocation.colIndex]
+            const targetColumn = newLayout.sections[targetLocation.sectionIndex]?.container?.rows?.[targetLocation.rowIndex]?.columns?.[targetLocation.colIndex]
+
+            if (!sourceColumn || !targetColumn || !Array.isArray(sourceColumn.components) || !Array.isArray(targetColumn.components)) {
+              return prevLayout
+            }
+
+            const [movedComponent] = sourceColumn.components.splice(sourceLocation.componentIndex, 1)
+            if (!movedComponent) {
+              return prevLayout
+            }
+
+            const sameColumn =
+              sourceLocation.sectionIndex === targetLocation.sectionIndex &&
+              sourceLocation.rowIndex === targetLocation.rowIndex &&
+              sourceLocation.colIndex === targetLocation.colIndex
+
+            const insertIndex = sameColumn
+              ? sourceLocation.componentIndex < targetLocation.componentIndex
+                ? Math.max(0, targetLocation.componentIndex - 1)
+                : targetLocation.componentIndex
+              : targetLocation.componentIndex
+
+            targetColumn.components.splice(insertIndex, 0, movedComponent)
+
+            if (saveLayout) {
+              setTimeout(() => {
+                saveLayout(newLayout).then((success) => {
+                  console.log(success ? '💾 Component reorder saved' : '❌ Failed to save component reorder')
+                })
+              }, 0)
+            }
+
+            return newLayout
+          })
+
+          return
+        }
+      }
+
       // 🎯 CRITICAL FIX: Handle carousel drops
       if (dropZoneId?.startsWith('component:carousel-')) {
         console.log('🎠 CAROUSEL DROP DETECTED:', dropZoneId)
@@ -399,7 +510,7 @@ export const useLayoutActions = (
           console.log('🔍 Carousel ID parsed from drop:', carouselIdFromDrop)
 
           setLayout((prevLayout) => {
-            const newLayout = JSON.parse(JSON.stringify(prevLayout))
+            const newLayout = cloneLayoutForUpdate(prevLayout)
             let carouselUpdated = false
 
             const findAndUpdateCarousel = (components: LayoutComponent[]): boolean => {
@@ -559,7 +670,7 @@ export const useLayoutActions = (
         const sectionId = dropZoneId.replace('section:', '')
 
         setLayout((prevLayout) => {
-          const newLayout = JSON.parse(JSON.stringify(prevLayout))
+          const newLayout = cloneLayoutForUpdate(prevLayout)
 
           // Find the section
           const section = newLayout.sections.find((s: Section) => s.id === sectionId)
@@ -651,7 +762,7 @@ export const useLayoutActions = (
         const [_, sectionId, containerId, rowId, colId] = destParts
 
         setLayout((prevLayout) => {
-          const newLayout = JSON.parse(JSON.stringify(prevLayout))
+          const newLayout = cloneLayoutForUpdate(prevLayout)
 
           // Find the target column
           const section = newLayout.sections.find((s: Section) => s.id === sectionId)
@@ -884,7 +995,7 @@ export const useLayoutActions = (
   const handleComponentAdd = useCallback(
     (componentDef: ComponentDefinition) => {
       setLayout((prevLayout) => {
-        const newLayout = JSON.parse(JSON.stringify(prevLayout))
+        const newLayout = cloneLayoutForUpdate(prevLayout)
 
         const defaultProps = componentDef.defaultProps || {}
         let enhancedDefaultProps = { ...defaultProps }
@@ -984,7 +1095,7 @@ export const useLayoutActions = (
       })
 
       setLayout((prevLayout) => {
-        const newLayout = JSON.parse(JSON.stringify(prevLayout))
+        const newLayout = cloneLayoutForUpdate(prevLayout)
         let componentDeleted = false
 
         // Helper to delete from array
@@ -1087,12 +1198,13 @@ export const useLayoutActions = (
   const duplicateComponent = useCallback(
     (componentId: string) => {
       setLayout((prevLayout) => {
-        const sourceComponent = findComponentEverywhere(prevLayout, componentId)
+        const safePrevLayout = cloneLayoutForUpdate(prevLayout)
+        const sourceComponent = findComponentEverywhere(safePrevLayout, componentId)
         if (!sourceComponent) {
-          return prevLayout
+          return safePrevLayout
         }
 
-        const newLayout = JSON.parse(JSON.stringify(prevLayout))
+        const newLayout = cloneLayoutForUpdate(safePrevLayout)
 
         // Create duplicated component with new ID
         const duplicatedComponent: LayoutComponent = {
@@ -1141,13 +1253,14 @@ export const useLayoutActions = (
   const moveComponent = useCallback(
     (componentId: string, targetContainerId: string, targetIndex: number) => {
       setLayout((prevLayout) => {
-        const sourceComponent = findComponentEverywhere(prevLayout, componentId)
+        const safePrevLayout = cloneLayoutForUpdate(prevLayout)
+        const sourceComponent = findComponentEverywhere(safePrevLayout, componentId)
         if (!sourceComponent) {
-          return prevLayout
+          return safePrevLayout
         }
 
         // Simple implementation - just duplicate for now
-        const newLayout = JSON.parse(JSON.stringify(prevLayout))
+        const newLayout = cloneLayoutForUpdate(safePrevLayout)
 
         // Create duplicated component with new ID
         const movedComponent: LayoutComponent = {
@@ -1167,7 +1280,7 @@ export const useLayoutActions = (
           }
         }
 
-        return prevLayout
+        return safePrevLayout
       })
     },
     [setLayout],
@@ -1178,7 +1291,7 @@ export const useLayoutActions = (
       console.log('🗑️ Deleting column:', { sectionId, containerId, rowId, colId })
 
       setLayout((prevLayout) => {
-        const newLayout = JSON.parse(JSON.stringify(prevLayout))
+        const newLayout = cloneLayoutForUpdate(prevLayout)
         let columnDeleted = false
 
         // Find section

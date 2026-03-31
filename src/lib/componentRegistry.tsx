@@ -9,7 +9,6 @@ import { advancedParagraphDefaultProps, advancedParagraphSchema } from '../compo
 import AdvancedImageComponent, { advancedImageDefaultProps, advancedImageSchema } from '../components/PageEditor/components/AdvancedImageComponent'
 import AdvancedCardComponent, { advancedCardDefaultProps, advancedCardSchema } from '@/components/PageEditor/components/AdvancedCardComponent'
 import AdvancedAccordion, { advancedAccordionDefaultProps, advancedAccordionSchema } from '@/components/PageEditor/components/AdvancedAccordion'
-import { Carousel, carouselDefaultProps, carouselSchema } from '@/components/PageEditor/components/Carousel'
 import AdvancedList, { advancedListDefaultProps, advancedListSchema } from '@/components/PageEditor/components/AdvancedList'
 import NewGridComponent, { newGridDefaultProps, newGridSchema } from '../components/PageEditor/components/NewGrid'
 import AdvancedButton, { advancedButtonDefaultProps, advancedButtonSchema } from '../components/PageEditor/components/AdvancedButton'
@@ -80,6 +79,11 @@ class ComponentRegistry {
   private components: Map<string, ComponentDefinition> = new Map()
   private categories: Map<string, ComponentDefinition[]> = new Map()
 
+  clear(): void {
+    this.components.clear()
+    this.categories.clear()
+  }
+
   // Register a component
   register(component: ComponentDefinition): void {
     this.components.set(component.id, component)
@@ -134,6 +138,7 @@ class ComponentRegistry {
 
 // Create global registry instance
 export const componentRegistry = new ComponentRegistry()
+let registryInitialized = false
 
 // ============================================================================
 // COMPONENT REGISTRATION FUNCTIONS
@@ -266,7 +271,7 @@ function registerContainerComponent(): void {
     icon: '📦',
     description: 'Container with max width and centering',
     defaultProps: {
-      maxWidth: '1200px',
+      maxWidth: '960px',
       padding: '20px',
       margin: '0 auto',
       backgroundColor: 'transparent',
@@ -276,7 +281,7 @@ function registerContainerComponent(): void {
         maxWidth: {
           type: 'text',
           label: 'Max Width',
-          default: '1200px',
+          default: '960px',
         },
         padding: {
           type: 'text',
@@ -300,7 +305,7 @@ function registerContainerComponent(): void {
         'div',
         {
           style: {
-            maxWidth: props.maxWidth || '1200px',
+            maxWidth: props.maxWidth || '960px',
             margin: props.margin || '0 auto',
             padding: props.padding || '20px',
             backgroundColor: props.backgroundColor || 'transparent',
@@ -661,6 +666,116 @@ function registerAdvancedButtonComponent(): void {
 }
 
 function registerVideoComponent(): void {
+  const defaultVideoUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+
+  const getYouTubeId = (urlString: string): string | null => {
+    const trimmed = (urlString || '').trim()
+    if (!trimmed) return null
+
+    const shortMatch = trimmed.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/)
+    if (shortMatch?.[1]) return shortMatch[1]
+
+    const embedMatch = trimmed.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/)
+    if (embedMatch?.[1]) return embedMatch[1]
+
+    const shortsMatch = trimmed.match(/youtube\.com\/shorts\/([A-Za-z0-9_-]{6,})/)
+    if (shortsMatch?.[1]) return shortsMatch[1]
+
+    try {
+      const parsed = new URL(trimmed)
+      return parsed.searchParams.get('v')
+    } catch {
+      return null
+    }
+  }
+
+  const getVimeoId = (urlString: string): string | null => {
+    const match = (urlString || '').match(/vimeo\.com\/(?:video\/)?(\d{5,})/)
+    return match?.[1] || null
+  }
+
+  const withQueryParams = (urlString: string, params: Record<string, string>): string => {
+    try {
+      const parsed = new URL(urlString)
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === '' || value === undefined || value === null) {
+          parsed.searchParams.delete(key)
+          return
+        }
+        parsed.searchParams.set(key, value)
+      })
+      return parsed.toString()
+    } catch {
+      return urlString
+    }
+  }
+
+  const resolveIframeSource = (props: any): string => {
+    const sourceType = props.sourceType || 'auto'
+    const src = (props.src || defaultVideoUrl).trim()
+    const lowerSrc = src.toLowerCase()
+    const autoplay = Boolean(props.autoplay)
+    const muted = Boolean(props.muted)
+    const loop = Boolean(props.loop)
+    const controls = props.controls !== false
+
+    const isYoutubeUrl = lowerSrc.includes('youtube.com') || lowerSrc.includes('youtu.be')
+    if (sourceType === 'youtube' || (sourceType === 'auto' && isYoutubeUrl)) {
+      const id = getYouTubeId(src)
+      if (id) {
+        return withQueryParams(`https://www.youtube.com/embed/${id}`, {
+          autoplay: autoplay ? '1' : '0',
+          mute: muted ? '1' : '0',
+          controls: controls ? '1' : '0',
+          loop: loop ? '1' : '0',
+          playlist: loop ? id : '',
+          rel: '0',
+          modestbranding: '1',
+        })
+      }
+    }
+
+    const isVimeoUrl = lowerSrc.includes('vimeo.com')
+    if (sourceType === 'vimeo' || (sourceType === 'auto' && isVimeoUrl)) {
+      const id = getVimeoId(src)
+      if (id) {
+        return withQueryParams(`https://player.vimeo.com/video/${id}`, {
+          autoplay: autoplay ? '1' : '0',
+          muted: muted ? '1' : '0',
+          loop: loop ? '1' : '0',
+          controls: controls ? '1' : '0',
+          title: '0',
+          byline: '0',
+          portrait: '0',
+        })
+      }
+    }
+
+    return src
+  }
+
+  const applyAlphaToColor = (colorValue: string, alphaPercent: number): string => {
+    const alpha = Math.max(0, Math.min(100, alphaPercent)) / 100
+    const trimmed = (colorValue || '').trim()
+    const shortHexMatch = trimmed.match(/^#([0-9a-fA-F]{3})$/)
+    const longHexMatch = trimmed.match(/^#([0-9a-fA-F]{6})$/)
+
+    if (shortHexMatch?.[1]) {
+      const [r, g, b] = shortHexMatch[1].split('').map((char) => parseInt(`${char}${char}`, 16))
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    }
+
+    if (longHexMatch?.[1]) {
+      const hex = longHexMatch[1]
+      const r = parseInt(hex.slice(0, 2), 16)
+      const g = parseInt(hex.slice(2, 4), 16)
+      const b = parseInt(hex.slice(4, 6), 16)
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    }
+
+    return trimmed || `rgba(255,255,255,${alpha})`
+  }
+
   componentRegistry.register({
     id: 'video',
     name: 'Video',
@@ -669,47 +784,200 @@ function registerVideoComponent(): void {
     icon: '🎥',
     description: 'Embed videos from YouTube, Vimeo, or upload',
     defaultProps: {
-      src: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+      src: defaultVideoUrl,
+      sourceType: 'auto',
+      autoplay: false,
+      muted: false,
+      controls: true,
+      loop: false,
       width: '100%',
-      height: '315px',
+      maxWidth: '100%',
+      aspectRatio: '16 / 9',
+      borderRadius: 10,
+      borderColor: '#ffffff',
+      borderOpacity: 13,
+      accentColor: '#7c6dfa',
+      showOverlay: true,
+      overlayStrength: 10,
+      showPreviewChrome: true,
+      previewProgress: 35,
+      previewTime: '1:24 / 4:05',
+      objectFit: 'cover',
+      title: 'Video',
     },
     schema: {
       properties: {
         src: {
           type: 'text',
           label: 'Video URL',
-          default: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          default: defaultVideoUrl,
+        },
+        sourceType: {
+          type: 'select',
+          label: 'Source Type',
+          default: 'auto',
+          options: [
+            { value: 'auto', label: 'Auto Detect' },
+            { value: 'youtube', label: 'YouTube' },
+            { value: 'vimeo', label: 'Vimeo' },
+            { value: 'mp4', label: 'MP4 File' },
+          ],
+        },
+        autoplay: {
+          type: 'toggle',
+          label: 'Autoplay',
+          default: false,
+        },
+        muted: {
+          type: 'toggle',
+          label: 'Muted',
+          default: false,
+        },
+        controls: {
+          type: 'toggle',
+          label: 'Show Native Controls',
+          default: true,
+        },
+        loop: {
+          type: 'toggle',
+          label: 'Loop',
+          default: false,
         },
         width: {
           type: 'text',
           label: 'Width',
           default: '100%',
         },
-        height: {
+        maxWidth: {
           type: 'text',
-          label: 'Height',
-          default: '315px',
+          label: 'Max Width',
+          default: '100%',
+        },
+        aspectRatio: {
+          type: 'select',
+          label: 'Aspect Ratio',
+          default: '16 / 9',
+          options: [
+            { value: '16 / 9', label: '16:9' },
+            { value: '4 / 3', label: '4:3' },
+            { value: '1 / 1', label: '1:1' },
+            { value: '21 / 9', label: '21:9' },
+          ],
+        },
+        borderRadius: {
+          type: 'number',
+          label: 'Border Radius',
+          default: 10,
+          min: 0,
+          max: 64,
+          step: 1,
+        },
+        borderColor: {
+          type: 'color',
+          label: 'Border Color',
+          default: '#ffffff',
+        },
+        borderOpacity: {
+          type: 'range',
+          label: 'Border Opacity',
+          default: 13,
+          min: 0,
+          max: 100,
+          step: 1,
+        },
+        accentColor: {
+          type: 'color',
+          label: 'Progress Accent',
+          default: '#7c6dfa',
+        },
+        showOverlay: {
+          type: 'toggle',
+          label: 'Show Overlay',
+          default: true,
+        },
+        overlayStrength: {
+          type: 'range',
+          label: 'Overlay Strength',
+          default: 10,
+          min: 0,
+          max: 60,
+          step: 1,
+        },
+        showPreviewChrome: {
+          type: 'toggle',
+          label: 'Show Preview Chrome',
+          default: true,
+        },
+        previewProgress: {
+          type: 'range',
+          label: 'Preview Progress',
+          default: 35,
+          min: 0,
+          max: 100,
+          step: 1,
+        },
+        previewTime: {
+          type: 'text',
+          label: 'Preview Time Label',
+          default: '1:24 / 4:05',
+        },
+        objectFit: {
+          type: 'select',
+          label: 'Object Fit (MP4)',
+          default: 'cover',
+          options: [
+            { value: 'cover', label: 'Cover' },
+            { value: 'contain', label: 'Contain' },
+            { value: 'fill', label: 'Fill' },
+          ],
         },
       },
     },
     render: (props) => {
+      const source = resolveIframeSource(props)
+      const isMp4Source = (props.sourceType === 'mp4' || String(props.src || '').toLowerCase().includes('.mp4')) && props.src
+
       return React.createElement(
         'div',
         {
-          style: { position: 'relative', paddingBottom: '56.25%', height: 0 },
-        },
-        React.createElement('iframe', {
-          src: props.src || 'https://www.youtube.com/embed/dQw4w9WgXcQ',
           style: {
-            position: 'absolute',
-            top: 0,
-            left: 0,
             width: props.width || '100%',
-            height: props.height || '315px',
-            border: 0,
+            maxWidth: props.maxWidth || '100%',
+            position: 'relative',
+            aspectRatio: props.aspectRatio || '16 / 9',
+            borderRadius: `${props.borderRadius ?? 10}px`,
+            overflow: 'hidden',
+            border: `1px solid ${applyAlphaToColor(props.borderColor || '#ffffff', Number(props.borderOpacity ?? 13))}`,
+            background: '#22263a',
           },
-          allowFullScreen: true,
-        }),
+        },
+        isMp4Source
+          ? React.createElement('video', {
+              src: props.src,
+              autoPlay: Boolean(props.autoplay),
+              muted: Boolean(props.muted) || Boolean(props.autoplay),
+              loop: Boolean(props.loop),
+              controls: props.controls !== false,
+              playsInline: true,
+              style: {
+                width: '100%',
+                height: '100%',
+                objectFit: props.objectFit || 'cover',
+                display: 'block',
+              },
+            })
+          : React.createElement('iframe', {
+              src: source,
+              style: {
+                width: '100%',
+                height: '100%',
+                border: 0,
+                display: 'block',
+              },
+              allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share',
+              allowFullScreen: true,
+              title: props.title || 'Video',
+            }),
       )
     },
   })
@@ -962,23 +1230,6 @@ function registerAdvancedImageComponent(): void {
   })
 }
 
-function registerCarouselComponent(): void {
-  componentRegistry.register({
-    id: 'carousel',
-    name: 'Carousel',
-    type: 'carousel',
-    category: 'layout',
-    icon: '🔄',
-    description: 'Single source carousel component with slides',
-    supportsChildren: true,
-
-    // ✅ SINGLE SOURCE FROM COMPONENT FILE
-    defaultProps: carouselDefaultProps,
-    schema: carouselSchema,
-
-    render: (props) => React.createElement(Carousel, props),
-  })
-}
 
 function registerNewGridComponent(): void {
   componentRegistry.register({
@@ -1002,6 +1253,12 @@ function registerNewGridComponent(): void {
 // ============================================================================
 
 export function initializeComponentRegistry(): void {
+  if (registryInitialized) {
+    return
+  }
+
+  componentRegistry.clear()
+
   // Register all components
   registerSpacerComponent()
   registerContainerComponent()
@@ -1020,9 +1277,9 @@ export function initializeComponentRegistry(): void {
   registerAdvancedListComponent()
   registerAdvancedCardComponent()
   registerAdvancedImageComponent()
-  registerCarouselComponent()
   registerNewGridComponent()
 
+  registryInitialized = true
   console.log('✅ Component Registry Initialized with', componentRegistry.getAllComponents().length, 'components')
 }
 

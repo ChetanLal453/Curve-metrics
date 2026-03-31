@@ -819,6 +819,47 @@ const AdvancedList: React.FC<AdvancedListProps> = (props) => {
   } = props
 
   const [isListHovered, setIsListHovered] = useState(false)
+  const [isEditor, setIsEditor] = useState(false)
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      setIsEditor(Boolean(document.querySelector('.cm-page-editor')))
+    }
+  }, [])
+
+  const resolvedListProps = useMemo(() => {
+    if (!isEditor) return listProps
+
+    const ifDefault = <T,>(value: T, originalDefault: T, previewValue: T): T => (value === originalDefault ? previewValue : value)
+
+    return {
+      ...listProps,
+      displayStyle: ifDefault(listProps.displayStyle, advancedListDefaultProps.displayStyle, 'bordered' as const),
+      columns: ifDefault(listProps.columns, advancedListDefaultProps.columns, 1 as const),
+      itemSpacing: ifDefault(listProps.itemSpacing, advancedListDefaultProps.itemSpacing, '10px'),
+      gap: ifDefault(listProps.gap, advancedListDefaultProps.gap, '12px'),
+      itemPadding: ifDefault(listProps.itemPadding, advancedListDefaultProps.itemPadding, '12px 14px'),
+      padding: ifDefault(listProps.padding, advancedListDefaultProps.padding, '0px'),
+      margin: ifDefault(listProps.margin, advancedListDefaultProps.margin, '0px'),
+      alignment: ifDefault(listProps.alignment, advancedListDefaultProps.alignment, 'left' as const),
+      titleFontSize: ifDefault(listProps.titleFontSize, advancedListDefaultProps.titleFontSize, '13px'),
+      titleFontWeight: ifDefault(listProps.titleFontWeight, advancedListDefaultProps.titleFontWeight, '600'),
+      descriptionFontSize: ifDefault(listProps.descriptionFontSize, advancedListDefaultProps.descriptionFontSize, '12.5px'),
+      fontFamily: ifDefault(listProps.fontFamily, advancedListDefaultProps.fontFamily, "'DM Sans', system-ui, sans-serif"),
+      lineHeight: ifDefault(listProps.lineHeight, advancedListDefaultProps.lineHeight, '1.65'),
+      titleColor: ifDefault(listProps.titleColor, advancedListDefaultProps.titleColor, 'var(--canvas-text, #e8eaf0)'),
+      descriptionColor: ifDefault(listProps.descriptionColor, advancedListDefaultProps.descriptionColor, 'var(--canvas-muted, #8b90a8)'),
+      iconColor: ifDefault(listProps.iconColor, advancedListDefaultProps.iconColor, 'var(--canvas-accent2, #a594ff)'),
+      backgroundColor: ifDefault(listProps.backgroundColor, advancedListDefaultProps.backgroundColor, 'transparent'),
+      border: ifDefault(listProps.border, advancedListDefaultProps.border, 'none'),
+      borderRadius: ifDefault(listProps.borderRadius, advancedListDefaultProps.borderRadius, '8px'),
+      itemBackground: ifDefault(listProps.itemBackground, advancedListDefaultProps.itemBackground, 'var(--canvas-surface2, #1a1d28)'),
+      boxBorderWidth: ifDefault(listProps.boxBorderWidth, advancedListDefaultProps.boxBorderWidth, '1px'),
+      boxBorderColor: ifDefault(listProps.boxBorderColor, advancedListDefaultProps.boxBorderColor, 'var(--canvas-border2, rgba(255,255,255,0.13))'),
+      defaultIcon: ifDefault(listProps.defaultIcon, advancedListDefaultProps.defaultIcon, '•'),
+      iconSize: ifDefault(listProps.iconSize, advancedListDefaultProps.iconSize, '16px'),
+    }
+  }, [isEditor, listProps])
 
   // Handle local updates
   const handleLocalUpdate = useCallback((updatedProps: Partial<AdvancedListProps>) => {
@@ -840,52 +881,52 @@ const AdvancedList: React.FC<AdvancedListProps> = (props) => {
 
   // Sort items by order
   const sortedItems = useMemo(() => {
-    return [...listProps.items]
+    return [...resolvedListProps.items]
       .filter(item => item.visible !== false)
       .sort((a, b) => a.order - b.order)
-  }, [listProps.items])
+  }, [resolvedListProps.items])
 
   // Get main list container style based on displayStyle
   const getListContainerStyle = (): React.CSSProperties => {
     const baseStyle: React.CSSProperties = {
-      fontFamily: listProps.fontFamily,
-      lineHeight: listProps.lineHeight,
+      fontFamily: resolvedListProps.fontFamily,
+      lineHeight: resolvedListProps.lineHeight,
       cursor: 'pointer',
       transition: 'all 0.3s ease',
       position: 'relative',
     }
 
-    switch (listProps.displayStyle) {
+    switch (resolvedListProps.displayStyle) {
       case 'plain':
         return {
           ...baseStyle,
-          backgroundColor: listProps.backgroundColor,
-          padding: listProps.padding,
-          margin: listProps.margin,
-          border: listProps.border,
-          borderRadius: listProps.borderRadius,
+          backgroundColor: resolvedListProps.backgroundColor,
+          padding: resolvedListProps.padding,
+          margin: resolvedListProps.margin,
+          border: resolvedListProps.border,
+          borderRadius: resolvedListProps.borderRadius,
         }
       
       case 'boxed':
       case 'bordered':
         return {
           ...baseStyle,
-          backgroundColor: listProps.backgroundColor,
-          padding: listProps.padding,
-          margin: listProps.margin,
-          border: listProps.border,
-          borderRadius: listProps.borderRadius,
+          backgroundColor: resolvedListProps.backgroundColor,
+          padding: resolvedListProps.padding,
+          margin: resolvedListProps.margin,
+          border: resolvedListProps.border,
+          borderRadius: resolvedListProps.borderRadius,
         }
       
       case 'full-box':
         return {
           ...baseStyle,
-          backgroundColor: listProps.fullBoxBackground || listProps.backgroundColor,
-          padding: listProps.fullBoxPadding,
-          margin: listProps.margin,
-          border: listProps.fullBoxBorder,
-          borderRadius: listProps.fullBoxBorderRadius,
-          ...getShadowStyle(listProps.fullBoxShadow),
+          backgroundColor: resolvedListProps.fullBoxBackground || resolvedListProps.backgroundColor,
+          padding: resolvedListProps.fullBoxPadding,
+          margin: resolvedListProps.margin,
+          border: resolvedListProps.fullBoxBorder,
+          borderRadius: resolvedListProps.fullBoxBorderRadius,
+          ...getShadowStyle(resolvedListProps.fullBoxShadow),
           ...(isListHovered && { transform: 'translateY(-2px)' }),
         }
       
@@ -896,14 +937,14 @@ const AdvancedList: React.FC<AdvancedListProps> = (props) => {
 
   const gridStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: `repeat(${listProps.columns}, 1fr)`,
-    gap: listProps.gap,
+    gridTemplateColumns: `repeat(${resolvedListProps.columns}, 1fr)`,
+    gap: resolvedListProps.gap,
     alignItems: 'flex-start',
   }
 
   // Single column alignment
   const singleColumnStyle: React.CSSProperties = {
-    textAlign: listProps.alignment,
+    textAlign: resolvedListProps.alignment,
     width: '100%',
   }
 
@@ -923,7 +964,7 @@ const AdvancedList: React.FC<AdvancedListProps> = (props) => {
 
   // Render different layouts
   const renderListContent = () => {
-    if (listProps.columns === 1) {
+    if (resolvedListProps.columns === 1) {
       return (
         <div style={singleColumnStyle}>
           {sortedItems.map((item, index) => (
@@ -931,7 +972,7 @@ const AdvancedList: React.FC<AdvancedListProps> = (props) => {
               key={item.id}
               item={item}
               index={index}
-              props={listProps}
+              props={resolvedListProps}
             />
           ))}
         </div>
@@ -940,11 +981,11 @@ const AdvancedList: React.FC<AdvancedListProps> = (props) => {
       return (
         <div style={gridStyle}>
           {sortedItems.map((item, index) => (
-            <div key={item.id} style={{ textAlign: listProps.alignment }}>
+            <div key={item.id} style={{ textAlign: resolvedListProps.alignment }}>
               <ListItemComponent
                 item={item}
                 index={index}
-                props={listProps}
+                props={resolvedListProps}
               />
             </div>
           ))}
@@ -953,7 +994,7 @@ const AdvancedList: React.FC<AdvancedListProps> = (props) => {
     }
   }
 
-  return (
+  const listNode = (
     <div 
       style={getListContainerStyle()} 
       className="advanced-list"
@@ -964,6 +1005,65 @@ const AdvancedList: React.FC<AdvancedListProps> = (props) => {
       {renderListContent()}
     </div>
   )
+
+  if (isEditor) {
+    const previewCardStyle: React.CSSProperties = {
+      width: '100%',
+      borderRadius: '12px',
+      border: '1px solid var(--canvas-border, rgba(255,255,255,0.07))',
+      overflow: 'hidden',
+      background: 'var(--canvas-surface, #13161e)',
+    }
+    const previewHeaderStyle: React.CSSProperties = {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '12px 16px',
+      background: 'var(--canvas-surface2, #1a1d28)',
+      borderBottom: '1px solid var(--canvas-border, rgba(255,255,255,0.07))',
+      fontFamily: "'DM Sans', system-ui, sans-serif",
+    }
+    const previewBodyStyle: React.CSSProperties = {
+      padding: '32px 40px',
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: resolvedListProps.alignment === 'center' ? 'center' : resolvedListProps.alignment === 'right' ? 'flex-end' : 'flex-start',
+      minHeight: '120px',
+      backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)',
+      backgroundSize: '20px 20px',
+    }
+
+    return (
+      <div style={{ width: '100%' }} onClick={handleClick}>
+        <div style={previewCardStyle}>
+          <div style={previewHeaderStyle}>
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--canvas-accent2, #a594ff)',
+                background: 'var(--canvas-accentbg, rgba(124,109,250,0.12))',
+                border: '1px solid rgba(124,109,250,0.2)',
+                padding: '2px 8px',
+                borderRadius: '20px',
+              }}
+            >
+              Content
+            </span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--canvas-text, #e8eaf0)' }}>List</span>
+            <span style={{ marginLeft: 'auto', fontSize: '11.5px', color: 'var(--canvas-text3, #5a5f7a)', fontFamily: "'DM Mono', monospace" }}>
+              {`${resolvedListProps.listType} · ${resolvedListProps.columns} col`}
+            </span>
+          </div>
+          <div style={previewBodyStyle}>{listNode}</div>
+        </div>
+      </div>
+    )
+  }
+
+  return listNode
 }
 
 // Attach default props and schema

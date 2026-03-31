@@ -3,6 +3,7 @@ import pool from '../../../../lib/db.js'
 import { requireAdmin } from '../../../../lib/require-admin.js'
 import {
   databaseErrorResponse,
+  getExistingColumns,
   missingTableResponse,
   parseJsonRows,
   parsePaginationParams,
@@ -13,7 +14,7 @@ function normalizeVersionRow(row) {
   return {
     id: row.id,
     page_id: row.page_id,
-    version_name: row.version_name || `Version ${row.version_number || 1}`,
+    version_name: row.version_name || row.name || `Version ${row.version_number || 1}`,
     version_number: Number(row.version_number || 1),
     layout: row.layout || row.content || {},
     description: row.description || row.notes || '',
@@ -40,19 +41,20 @@ export async function GET(request) {
       return missingTableResponse('page_versions')
     }
 
+    const versionColumns = await getExistingColumns('page_versions')
     const { limit, offset, applyPagination } = parsePaginationParams(request, { defaultLimit: 50, maxLimit: 200 })
     const [countRows] = await pool.query('SELECT COUNT(*) AS total FROM page_versions WHERE page_id = ?', [pageId])
     const values = [pageId]
     let query = `SELECT
       id,
       page_id,
-      version_name,
+      ${versionColumns.includes('version_name') ? 'version_name' : versionColumns.includes('name') ? 'name AS version_name' : 'NULL AS version_name'},
       version_number,
-      content,
-      layout,
-      description,
-      notes,
-      created_by,
+      ${versionColumns.includes('layout') ? 'layout' : 'NULL AS layout'},
+      ${versionColumns.includes('content') ? 'content' : 'NULL AS content'},
+      ${versionColumns.includes('description') ? 'description' : 'NULL AS description'},
+      ${versionColumns.includes('notes') ? 'notes' : 'NULL AS notes'},
+      ${versionColumns.includes('created_by') ? 'created_by' : 'NULL AS created_by'},
       created_at
     FROM page_versions
     WHERE page_id = ?

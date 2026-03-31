@@ -1,5 +1,5 @@
 import pool from '../../../../lib/db.js'
-import { getExistingColumns } from '../../_utils/crud.js'
+import { getExistingColumns, tableExists } from '../../_utils/crud.js'
 
 function safeParseJson(value, fallback) {
   if (value == null || value === '') return fallback
@@ -52,37 +52,107 @@ export async function GET(request, { params }) {
         ? draftLayout.sections
         : null
 
-    if (!formattedSections) {
-      const [sections] = await pool.execute(
-        `SELECT instance_id, section_type, props, responsive_props, style_props, accessibility_props, interactive_props,
-                COALESCE(section_order, sort_order, 0) AS sort_order, is_active, parent_section_id, grid_id, row_id, col_id
-         FROM sections
-         WHERE page_id = ? AND (is_active IS NULL OR is_active = TRUE)
-         ORDER BY COALESCE(section_order, sort_order, 0) ASC`,
-        [page.id],
-      )
+    if (!Array.isArray(formattedSections) || formattedSections.length === 0) {
+      if (await tableExists('sections')) {
+        const sectionColumns = await getExistingColumns('sections')
+        const hasPageId = sectionColumns.includes('page_id')
 
-      formattedSections = sections.map((section) => ({
-        id: section.instance_id,
-        type: section.section_type || 'unknown',
-        sectionType: section.section_type || 'unknown',
-        content: safeParseJson(section.props, {}),
-        props: safeParseJson(section.props, {}),
-        responsiveProps: safeParseJson(section.responsive_props, {}),
-        styleProps: safeParseJson(section.style_props, {}),
-        accessibilityProps: safeParseJson(section.accessibility_props, {}),
-        interactiveProps: safeParseJson(section.interactive_props, {}),
-        order: section.sort_order || 0,
-        isActive: section.is_active === 1 || section.is_active === true || section.is_active == null,
-        parentId: section.parent_section_id || null,
-        gridId: section.grid_id || null,
-        rowId: section.row_id || null,
-        colId: section.col_id || null,
-      }))
+        if (hasPageId) {
+          const [sections] = await pool.execute(
+            `SELECT * FROM sections WHERE page_id = ?`,
+            [page.id],
+          )
+
+          const mappedSections = sections
+            .filter((section) => section?.is_active === 1 || section?.is_active === true || section?.is_active == null)
+            .map((section, index) => ({
+              id: section.instance_id || section.id || `section-${index + 1}`,
+              type: section.section_type || section.type || 'unknown',
+              sectionType: section.section_type || section.type || 'unknown',
+              content: safeParseJson(section.props ?? section.content, {}),
+              props: safeParseJson(section.props ?? section.content, {}),
+              responsiveProps: safeParseJson(section.responsive_props, {}),
+              styleProps: safeParseJson(section.style_props, {}),
+              accessibilityProps: safeParseJson(section.accessibility_props, {}),
+              interactiveProps: safeParseJson(section.interactive_props, {}),
+              order: Number(section.section_order ?? section.sort_order ?? 0),
+              isActive: section.is_active === 1 || section.is_active === true || section.is_active == null,
+              parentId: section.parent_section_id || section.parent_id || null,
+              gridId: section.grid_id || null,
+              rowId: section.row_id || null,
+              colId: section.col_id || null,
+            }))
+
+          formattedSections = mappedSections.sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+        } else {
+          formattedSections = []
+        }
+      } else {
+        formattedSections = []
+      }
     }
 
-    const resolvedLiveLayout = liveLayout || { sections: formattedSections }
-    const resolvedDraftLayout = draftLayout || { sections: formattedSections }
+    let resolvedLiveLayout =
+      liveLayout && Array.isArray(liveLayout.sections) && liveLayout.sections.length > 0
+        ? liveLayout
+        : { ...(liveLayout || {}), sections: formattedSections }
+    let resolvedDraftLayout =
+      draftLayout && Array.isArray(draftLayout.sections) && draftLayout.sections.length > 0
+        ? draftLayout
+        : { ...(draftLayout || {}), sections: formattedSections }
+
+    const resolvedSections =
+      Array.isArray(resolvedDraftLayout?.sections) ? resolvedDraftLayout.sections : Array.isArray(resolvedLiveLayout?.sections) ? resolvedLiveLayout.sections : []
+
+    if (resolvedSections.length === 0 && (await tableExists('page_versions'))) {
+      const versionColumns = await getExistingColumns('page_versions')
+      if (versionColumns.includes('page_id')) {
+        const selectLayoutExpr = versionColumns.includes('layout')
+          ? 'layout'
+          : versionColumns.includes('content')
+            ? 'content AS layout'
+            : 'NULL AS layout'
+        const selectContentExpr = versionColumns.includes('content')
+          ? 'content'
+          : versionColumns.includes('layout')
+            ? 'layout AS content'
+            : 'NULL AS content'
+        const orderBy =
+          versionColumns.includes('version_number') && versionColumns.includes('created_at')
+            ? 'ORDER BY version_number DESC, created_at DESC'
+            : versionColumns.includes('version_number')
+              ? 'ORDER BY version_number DESC'
+              : versionColumns.includes('created_at')
+                ? 'ORDER BY created_at DESC'
+                : ''
+
+        const [versionRows] = await pool.execute(
+          `SELECT ${selectLayoutExpr}, ${selectContentExpr}
+           FROM page_versions
+           WHERE page_id = ?
+           ${orderBy}
+           LIMIT 1`,
+          [page.id],
+        )
+
+        if (Array.isArray(versionRows) && versionRows.length > 0) {
+          const recoveredLayout = safeParseJson(versionRows[0].layout ?? versionRows[0].content, null)
+          if (Array.isArray(recoveredLayout?.sections) && recoveredLayout.sections.length > 0) {
+            resolvedLiveLayout = {
+              ...recoveredLayout,
+              id: String(page.id),
+              name: recoveredLayout.name || page.name || page.title || 'Untitled Page',
+            }
+            resolvedDraftLayout = {
+              ...recoveredLayout,
+              id: String(page.id),
+              name: recoveredLayout.name || page.name || page.title || 'Untitled Page',
+            }
+            formattedSections = recoveredLayout.sections
+          }
+        }
+      }
+    }
 
     return Response.json({
       success: true,

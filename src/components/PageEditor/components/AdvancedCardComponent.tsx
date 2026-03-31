@@ -1450,6 +1450,7 @@ const AdvancedCardComponent: React.FC<AdvancedCardComponentProps> = (props) => {
   const [isTitleHovered, setIsTitleHovered] = useState(false);
   const [isSubtitleHovered, setIsSubtitleHovered] = useState(false);
   const [isDescriptionHovered, setIsDescriptionHovered] = useState(false);
+  const [isEditor, setIsEditor] = useState(false);
 
   // Merge props with defaults
   const componentProps = { ...advancedCardDefaultProps, ...props };
@@ -1457,6 +1458,12 @@ const AdvancedCardComponent: React.FC<AdvancedCardComponentProps> = (props) => {
   useEffect(() => {
     setImageError(false);
   }, [componentProps.image]);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      setIsEditor(Boolean(document.querySelector('.cm-page-editor')));
+    }
+  }, []);
 
   // ✅ Function to get ANY FontAwesome icon
   const getIconComponent = () => {
@@ -1972,7 +1979,7 @@ const AdvancedCardComponent: React.FC<AdvancedCardComponentProps> = (props) => {
   };
 
   // Main render
-  return (
+  const baseCardNode = (
     <div
       className={`w-full rounded-2xl overflow-hidden relative transition-all duration-300`}
       style={{
@@ -2283,6 +2290,86 @@ const AdvancedCardComponent: React.FC<AdvancedCardComponentProps> = (props) => {
       )}
     </div>
   );
+
+  if (isEditor) {
+    const previewSubtitle =
+      componentProps.enableFlip
+        ? 'flip card'
+        : componentProps.showImage
+          ? 'media card'
+          : componentProps.showIcon
+            ? 'icon card'
+            : 'content card';
+
+    return (
+      <div style={{ width: '100%' }}>
+        <div
+          style={{
+            width: '100%',
+            borderRadius: '12px',
+            border: '1px solid var(--canvas-border, rgba(255,255,255,0.07))',
+            overflow: 'hidden',
+            background: 'var(--canvas-surface, #13161e)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '12px 16px',
+              background: 'var(--canvas-surface2, #1a1d28)',
+              borderBottom: '1px solid var(--canvas-border, rgba(255,255,255,0.07))',
+              fontFamily: "'DM Sans', system-ui, sans-serif",
+            }}
+          >
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--canvas-accent2, #a594ff)',
+                background: 'var(--canvas-accentbg, rgba(124,109,250,0.12))',
+                border: '1px solid rgba(124,109,250,0.2)',
+                padding: '2px 8px',
+                borderRadius: '20px',
+              }}
+            >
+              Content
+            </span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--canvas-text, #e8eaf0)' }}>Card</span>
+            <span
+              style={{
+                marginLeft: 'auto',
+                fontSize: '11.5px',
+                color: 'var(--canvas-text3, #5a5f7a)',
+                fontFamily: "'DM Mono', monospace",
+              }}
+            >
+              {previewSubtitle}
+            </span>
+          </div>
+
+          <div
+            style={{
+              padding: '28px 36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '120px',
+              backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)',
+              backgroundSize: '20px 20px',
+            }}
+          >
+            {baseCardNode}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return baseCardNode;
 };
 
 // Attach schema to component

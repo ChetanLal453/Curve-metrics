@@ -4,12 +4,19 @@ import React, { createContext, useContext, useState, useCallback } from 'react'
 import {
   DndContext,
   DragStartEvent,
+  DragOverEvent,
   DragEndEvent,
+  DragCancelEvent,
   PointerSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
   closestCenter,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
+  type Collision,
+  MeasuringStrategy,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 
@@ -53,6 +60,44 @@ interface DragDropProviderProps {
   onDragEnd: (result: any, draggedItem: any) => void
 }
 
+const getDropPriority = (id: string): number => {
+  if (id.startsWith('component:empty:grid:')) return 0
+  if (id.startsWith('swiper-')) return 1
+  if (id.startsWith('component:carousel-')) return 2
+  if (id.startsWith('column:')) return 10
+  if (id === 'page-sections') return 20
+  return 15
+}
+
+const prioritizeNestedTargets = (collisions: Collision[]): Collision[] => {
+  if (!collisions.length) return collisions
+
+  return [...collisions].sort((a, b) => {
+    const aId = String(a.id)
+    const bId = String(b.id)
+    const pDiff = getDropPriority(aId) - getDropPriority(bId)
+    if (pDiff !== 0) return pDiff
+
+    const aValue = typeof a.data?.value === 'number' ? a.data.value : 0
+    const bValue = typeof b.data?.value === 'number' ? b.data.value : 0
+    return bValue - aValue
+  })
+}
+
+const smoothCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args)
+  if (pointerCollisions.length > 0) {
+    return prioritizeNestedTargets(pointerCollisions)
+  }
+
+  const rectCollisions = rectIntersection(args)
+  if (rectCollisions.length > 0) {
+    return prioritizeNestedTargets(rectCollisions)
+  }
+
+  return prioritizeNestedTargets(closestCenter(args))
+}
+
 export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children, onDragEnd }) => {
   const [isDragging, setIsDragging] = useState(false)
   const [draggedItem, setDraggedItem] = useState<LocalDragItem | null>(null)
@@ -89,11 +134,22 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children, on
     console.log('🎯 Valid drop zones:', zones)
   }, [])
 
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const overId = event.over?.id ? String(event.over.id) : ''
+    const isNestedTarget =
+      overId.startsWith('component:empty:grid:') ||
+      overId.startsWith('swiper-') ||
+      overId.startsWith('component:carousel-')
+
+    setIsDraggingOverNested(isNestedTarget)
+  }, [])
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       console.log('🎯 Drag ended:', { active: event.active.id, over: event.over?.id, draggedItem })
 
       setIsDragging(false)
+      setIsDraggingOverNested(false)
       document.body.setAttribute('data-cm-dragging', 'false')
       setValidDropZones([])
 
@@ -139,6 +195,14 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children, on
     [onDragEnd, draggedItem],
   )
 
+  const handleDragCancel = useCallback((_event: DragCancelEvent) => {
+    setIsDragging(false)
+    setIsDraggingOverNested(false)
+    setDraggedItem(null)
+    setValidDropZones([])
+    document.body.setAttribute('data-cm-dragging', 'false')
+  }, [])
+
   const clearValidDropZones = useCallback(() => {
     setValidDropZones([])
   }, [])
@@ -154,7 +218,19 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children, on
 
   return (
     <DragDropContextValue.Provider value={contextValue}>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={smoothCollisionDetection}
+        measuring={{
+          droppable: {
+            strategy: MeasuringStrategy.Always,
+          },
+        }}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
         {children}
       </DndContext>
     </DragDropContextValue.Provider>

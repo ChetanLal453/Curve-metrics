@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ComponentLibrary } from '../ComponentLibrary'
 import { StructureTree } from './StructureTree'
 import { Section, LayoutComponent, ComponentDefinition } from '@/types/page-editor'
@@ -24,29 +24,38 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'library' | 'structure'>('library')
 
+  useEffect(() => {
+    if (selectedSectionId || selectedComponentId) {
+      setActiveTab('structure')
+    }
+  }, [selectedComponentId, selectedSectionId])
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="lp-tabs">
+    <div className="left-panel h-full flex flex-col">
+      <div className="panel-tabs lp-tabs">
         <button
           onClick={() => setActiveTab('library')}
-          className={`lptab ${activeTab === 'library' ? 'active' : ''}`}
+          className={`panel-tab lptab ${activeTab === 'library' ? 'active' : ''}`}
+          type="button"
         >
           Components
         </button>
         <button
           onClick={() => setActiveTab('structure')}
-          className={`lptab ${activeTab === 'structure' ? 'active' : ''}`}
+          className={`panel-tab lptab ${activeTab === 'structure' ? 'active' : ''}`}
+          type="button"
         >
           Structure
         </button>
       </div>
-      <div className="lp-div" />
 
-      <div className="lp-body">
+      <div id="tab-components" className={`left-tab-panel ${activeTab === 'library' ? 'active' : 'hidden'}`}>
         {activeTab === 'library' && (
           <ComponentLibrary onComponentSelect={onComponentAdd} />
         )}
+      </div>
 
+      <div id="tab-structure" className={`left-tab-panel ${activeTab === 'structure' ? 'active' : 'hidden'}`}>
         {activeTab === 'structure' && (
           <StructureTree
             layout={layout}

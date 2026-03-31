@@ -70,39 +70,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({ editor }) => {
 
       <div className="w-px h-6 bg-gray-300 mx-1" />
 
-      {/* Headings */}
-      <button
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        className={`px-2 py-1 rounded text-sm font-medium ${
-          editor.isActive('heading', { level: 1 }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
-        title="Heading 1"
-      >
-        H1
-      </button>
-
-      <button
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        className={`px-2 py-1 rounded text-sm font-medium ${
-          editor.isActive('heading', { level: 2 }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
-        title="Heading 2"
-      >
-        H2
-      </button>
-
-      <button
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        className={`px-2 py-1 rounded text-sm font-medium ${
-          editor.isActive('heading', { level: 3 }) ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200'
-        }`}
-        title="Heading 3"
-      >
-        H3
-      </button>
-
-      <div className="w-px h-6 bg-gray-300 mx-1" />
-
       {/* Lists */}
       <button
         onClick={() => editor.chain().focus().toggleBulletList().run()}

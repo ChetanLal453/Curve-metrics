@@ -9,62 +9,116 @@ interface ComponentCardProps {
   component: ComponentDefinition
   index: number
   onClick?: () => void
+  displayName?: string
+  glyphKey?: string
 }
 
 const iconMap: Record<string, React.ReactNode> = {
-  section: <path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round" />,
-  container: <rect x="2" y="2" width="12" height="12" rx="1.5" />,
+  section: <line x1="3" y1="12" x2="21" y2="12" strokeLinecap="round" />,
+  spacer: <rect x="3" y="8" width="18" height="8" rx="1" />,
+  container: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+    </>
+  ),
+  flex: (
+    <>
+      <rect x="3" y="3" width="8" height="18" rx="1" />
+      <rect x="13" y="3" width="8" height="18" rx="1" />
+    </>
+  ),
   grid: (
     <>
-      <rect x="2" y="2" width="5" height="5" rx="1" />
-      <rect x="9" y="2" width="5" height="5" rx="1" />
-      <rect x="2" y="9" width="5" height="5" rx="1" />
-      <rect x="9" y="9" width="5" height="5" rx="1" />
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
     </>
   ),
   form: (
     <>
-      <rect x="2" y="3" width="12" height="3" rx="1" />
-      <rect x="2" y="8" width="12" height="3" rx="1" />
-      <rect x="2" y="13" width="8" height="1" rx="0.5" />
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <line x1="3" y1="10" x2="21" y2="10" />
     </>
   ),
-  text: (
+  heading: (
     <>
-      <path d="M3 4h10" strokeLinecap="round" />
-      <path d="M8 4v8" strokeLinecap="round" />
-      <path d="M5 12h6" strokeLinecap="round" />
+      <polyline points="4 7 4 4 20 4 20 7" />
+      <line x1="9" y1="20" x2="15" y2="20" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+    </>
+  ),
+  paragraph: (
+    <>
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="15" y2="18" />
+    </>
+  ),
+  list: (
+    <>
+      <circle cx="5" cy="6" r="1.2" />
+      <circle cx="5" cy="12" r="1.2" />
+      <circle cx="5" cy="18" r="1.2" />
+      <line x1="9" y1="6" x2="20" y2="6" />
+      <line x1="9" y1="12" x2="20" y2="12" />
+      <line x1="9" y1="18" x2="20" y2="18" />
     </>
   ),
   media: (
     <>
-      <rect x="2" y="3" width="12" height="10" rx="1.5" />
-      <path d="M4 10l2.5-2.5L9 10l1.5-1.5L14 12" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="5.5" cy="6" r="1" />
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </>
+  ),
+  video: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <polygon points="10 9 15 12 10 15 10 9" />
     </>
   ),
   button: (
     <>
-      <rect x="2" y="5" width="12" height="6" rx="3" />
-      <path d="M6 8h4" strokeLinecap="round" />
+      <rect x="3" y="8" width="18" height="8" rx="4" />
     </>
   ),
+  accordion: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+  carousel: (
+    <>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <line x1="7" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="17" y2="12" />
+    </>
+  ),
+  chart: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />,
 }
 
-const getGlyph = (component: ComponentDefinition) => {
-  const value = String(component.icon || '').toLowerCase()
+const getGlyph = (component: ComponentDefinition, glyphKey?: string) => {
+  const value = [glyphKey, component.id, component.type, component.name, component.category, component.icon].join(' ').toLowerCase()
 
+  if (value.includes('spacer')) return iconMap.spacer
+  if (value.includes('container')) return iconMap.container
+  if (value.includes('flex')) return iconMap.flex
   if (value.includes('grid')) return iconMap.grid
+  if (value.includes('divider')) return iconMap.section
   if (value.includes('form')) return iconMap.form
-  if (value.includes('image') || value.includes('media') || value.includes('photo')) return iconMap.media
+  if (value.includes('heading')) return iconMap.heading
+  if (value.includes('list')) return iconMap.list
+  if (value.includes('paragraph') || value.includes('quote') || value.includes('richtext')) return iconMap.paragraph
+  if (value.includes('image') || value.includes('icon')) return iconMap.media
+  if (value.includes('video')) return iconMap.video
   if (value.includes('button')) return iconMap.button
-  if (value.includes('text') || value.includes('heading') || value.includes('paragraph')) return iconMap.text
-  if (value.includes('container') || value.includes('section')) return iconMap.container
+  if (value.includes('accordion')) return iconMap.accordion
+  if (value.includes('carousel') || value.includes('swiper') || value.includes('slider')) return iconMap.carousel
+  if (value.includes('chart')) return iconMap.chart
+  if (value.includes('section')) return iconMap.container
 
   return iconMap.section
 }
 
-export const ComponentCard: React.FC<ComponentCardProps> = ({ component, onClick }) => {
+export const ComponentCard: React.FC<ComponentCardProps> = ({ component, onClick, displayName, glyphKey }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `component:${component.id}`,
     data: {
@@ -85,16 +139,15 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({ component, onClick
       {...listeners}
       {...attributes}
       draggable="true"
-      className={`cc ${isDragging ? 'opacity-50' : ''}`}
+      className={`comp-item cc ${isDragging ? 'opacity-50' : ''}`}
       onClick={onClick}
     >
-      <div className="cc-i">
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          {getGlyph(component)}
+      <div className="comp-icon cc-i">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          {getGlyph(component, glyphKey)}
         </svg>
       </div>
-      <div className="cc-n">{component.name}</div>
-      <div className="cc-d">{component.description || component.category}</div>
+      <div className="comp-name cc-n">{displayName || component.name}</div>
     </div>
   )
 }

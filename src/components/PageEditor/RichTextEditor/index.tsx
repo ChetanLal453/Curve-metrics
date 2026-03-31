@@ -22,7 +22,9 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
 }) => {
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        heading: false,
+      }),
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
@@ -35,7 +37,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         },
       }),
       TextAlign.configure({
-        types: ['heading', 'paragraph'],
+        types: ['paragraph'],
       }),
       Color,
       TextStyle,

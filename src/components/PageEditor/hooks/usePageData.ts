@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Page, PageLayout, Section } from '@/types/page-editor'
 import { sanitizeSectionProps, validateSectionProps } from '@/lib/sectionSchemas'
 
@@ -70,7 +70,7 @@ const normalizeEditorLayout = (layout: any, page?: Partial<EditorPage>): PageLay
   const sections = Array.isArray(safeLayout.sections) ? safeLayout.sections : []
 
   return {
-    id: String(safeLayout.id || page?.id || ''),
+    id: String(page?.id || safeLayout.id || ''),
     name: String(safeLayout.name || page?.name || page?.title || 'Untitled Page'),
     sections: sections.map(normalizeSection),
   }
@@ -82,17 +82,29 @@ export const usePageData = (initialPageId?: string) => {
   const [layout, setLayout] = useState<PageLayout>(emptyLayout())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const activePagesFetchRequestRef = useRef(0)
+  const activeLoadRequestRef = useRef(0)
+  const activeSaveRequestRef = useRef(0)
+  const hasResolvedInitialPageRef = useRef(false)
+  const currentPageIdRef = useRef<string | null>(initialPageId || null)
+
+  useEffect(() => {
+    currentPageIdRef.current = currentPageId
+  }, [currentPageId])
 
   const fetchPages = useCallback(async () => {
+    const requestId = activePagesFetchRequestRef.current + 1
+    activePagesFetchRequestRef.current = requestId
+
     setLoading(true)
     setError(null)
 
     try {
       const response = await fetch('/api/pages')
       const data = await response.json()
-      console.log('API RESPONSE:', data)
 
       if (!response.ok || !data.success) {
+        if (requestId !== activePagesFetchRequestRef.current) return
         setError(data.error || 'Failed to fetch pages')
         return
       }
@@ -112,42 +124,58 @@ export const usePageData = (initialPageId?: string) => {
         banner_slug: page.banner_slug ?? null,
       }))
 
+      if (requestId !== activePagesFetchRequestRef.current) return
       setPages(pagesData)
 
       if (!pagesData.length) {
+        currentPageIdRef.current = null
         setCurrentPageId(null)
         setLayout(emptyLayout())
         return
       }
 
-      const requestedPage = initialPageId
-        ? pagesData.find((page) => page.id === initialPageId)
-        : currentPageId
-          ? pagesData.find((page) => page.id === currentPageId)
-          : null
-      const defaultPage = pagesData.find((page) => page.slug === 'home') || pagesData[0]
-      const nextPage = requestedPage || defaultPage
+      const defaultPage = pagesData.find((page) => String(page.slug || '').toLowerCase() === 'home') || pagesData[0]
 
-      if (nextPage?.id && nextPage.id !== currentPageId) {
+      let nextPage: EditorPage | undefined
+      if (!hasResolvedInitialPageRef.current) {
+        nextPage = initialPageId
+          ? pagesData.find((page) => String(page.id) === String(initialPageId))
+          : defaultPage
+        hasResolvedInitialPageRef.current = true
+      } else {
+        const selectedPageId = currentPageIdRef.current
+        nextPage = selectedPageId
+          ? pagesData.find((page) => String(page.id) === String(selectedPageId))
+          : defaultPage
+      }
+
+      if (nextPage?.id && String(nextPage.id) !== String(currentPageIdRef.current ?? '')) {
+        currentPageIdRef.current = String(nextPage.id)
         setCurrentPageId(nextPage.id)
       }
     } catch (fetchError) {
       console.error('Error fetching pages:', fetchError)
+      if (requestId !== activePagesFetchRequestRef.current) return
       setError('Error fetching pages')
     } finally {
+      if (requestId !== activePagesFetchRequestRef.current) return
       setLoading(false)
     }
-  }, [currentPageId, initialPageId])
+  }, [initialPageId])
 
   const loadPage = useCallback(async (pageId: string | null) => {
-    if (!pageId) {
+    const normalizedPageId = pageId == null ? null : String(pageId)
+    const requestId = activeLoadRequestRef.current + 1
+    activeLoadRequestRef.current = requestId
+
+    if (!normalizedPageId) {
       setLayout(emptyLayout())
       return
     }
 
-    const currentPage = pages.find((page) => page.id === pageId)
-    if (!currentPage?.slug) {
-      setLayout(emptyLayout(pageId, currentPage?.name || 'Untitled Page'))
+    const currentPage = pages.find((page) => String(page.id) === normalizedPageId)
+    if (!currentPage) {
+      setLayout(emptyLayout(normalizedPageId, 'Untitled Page'))
       return
     }
 
@@ -155,43 +183,105 @@ export const usePageData = (initialPageId?: string) => {
     setError(null)
 
     try {
-      const response = await fetch(`/api/page/${encodeURIComponent(currentPage.slug)}`)
-      const data = await response.json()
+      let loaded = false
+      let lastError: string | null = null
 
-      if (!response.ok || !data.success) {
-        setError(data.error || data.message || 'Failed to load page')
-        setLayout(emptyLayout(pageId, currentPage.name))
-        return
+      // 1) Preferred path: admin page by ID (authoritative editor source)
+      if (!loaded) {
+        const idResponse = await fetch(`/api/pages/${encodeURIComponent(normalizedPageId)}`)
+        const idData = await idResponse.json()
+
+        if (idResponse.ok && idData.success) {
+          if (requestId !== activeLoadRequestRef.current) return
+          const responsePageId = idData.page?.id == null ? null : String(idData.page.id)
+          if (!responsePageId || responsePageId === normalizedPageId) {
+            const normalizedLayout = normalizeEditorLayout(idData.page?.layout, {
+              id: idData.page?.id ?? currentPage.id,
+              name: idData.page?.name ?? currentPage.name,
+              title: idData.page?.title ?? currentPage.title,
+            })
+            setLayout(normalizedLayout)
+            loaded = true
+          } else {
+            lastError = `Page ID mismatch (requested ${normalizedPageId}, got ${responsePageId})`
+          }
+        } else {
+          lastError = idData.error || idData.message || 'Failed to load page'
+        }
       }
 
-      const normalizedLayout = normalizeEditorLayout(data.layout, {
-        id: data.page?.id ?? currentPage.id,
-        name: data.page?.name ?? currentPage.name,
-        title: data.page?.title ?? currentPage.title,
-      })
+      // 2) Fallback path: slug endpoint (public route) when ID route fails
+      if (!loaded && currentPage.slug) {
+        try {
+          const slugResponse = await fetch(`/api/page/${encodeURIComponent(currentPage.slug)}`)
+          const slugData = await slugResponse.json()
 
-      setLayout(normalizedLayout)
+          if (slugResponse.ok && slugData.success) {
+            if (requestId !== activeLoadRequestRef.current) return
+            const responsePageId = slugData.page?.id == null ? null : String(slugData.page.id)
+            const expectedPageId = currentPage?.id == null ? null : String(currentPage.id)
+            if (!responsePageId || !expectedPageId || responsePageId === expectedPageId) {
+              const editorLayoutSource = slugData.draft_layout ?? slugData.layout
+              const normalizedLayout = normalizeEditorLayout(editorLayoutSource, {
+                id: slugData.page?.id ?? currentPage.id,
+                name: slugData.page?.name ?? currentPage.name,
+                title: slugData.page?.title ?? currentPage.title,
+              })
+              setLayout(normalizedLayout)
+              loaded = true
+            } else {
+              lastError = `Page slug mismatch (expected ${expectedPageId}, got ${responsePageId})`
+            }
+          } else {
+            lastError = slugData.error || slugData.message || 'Failed to load page by slug'
+          }
+        } catch (error) {
+          console.error('Error loading page by slug:', error)
+          lastError = 'Error loading page by slug'
+        }
+      }
+
+      if (!loaded) {
+        if (requestId !== activeLoadRequestRef.current) return
+        setError(lastError || 'Failed to load page')
+        setLayout(emptyLayout(normalizedPageId, currentPage.name))
+      }
     } catch (loadError) {
       console.error('Error loading page:', loadError)
+      if (requestId !== activeLoadRequestRef.current) return
       setError('Error loading page')
-      setLayout(emptyLayout(pageId, currentPage.name))
+      setLayout(emptyLayout(normalizedPageId, currentPage.name))
     } finally {
+      if (requestId !== activeLoadRequestRef.current) return
       setLoading(false)
     }
   }, [pages])
 
-  const setCurrentPageIdHandler = useCallback(async (pageId: string | null) => {
-    setCurrentPageId(pageId)
+  const setCurrentPageIdHandler = useCallback((pageId: string | null) => {
+    const normalizedPageId = pageId == null ? null : String(pageId)
+    if (normalizedPageId === currentPageIdRef.current) return
+    currentPageIdRef.current = normalizedPageId
+    setCurrentPageId(normalizedPageId)
   }, [])
 
   const saveLayout = useCallback(async (newLayout: PageLayout): Promise<boolean> => {
-    if (!currentPageId) {
+    const layoutPageId = newLayout?.id == null ? null : String(newLayout.id)
+    const selectedPageId = currentPageIdRef.current == null ? null : String(currentPageIdRef.current)
+    if (layoutPageId && selectedPageId && layoutPageId !== selectedPageId) {
+      // Ignore stale autosave attempts from a page that is no longer selected.
+      return false
+    }
+    const savePageId = selectedPageId || layoutPageId
+
+    if (!savePageId) {
       setError('No page selected')
       return false
     }
+    const requestId = activeSaveRequestRef.current + 1
+    activeSaveRequestRef.current = requestId
 
     const normalizedLayout = normalizeEditorLayout(newLayout, {
-      id: currentPageId,
+      id: savePageId,
       name: newLayout?.name,
     })
     const validatedSections = normalizedLayout.sections.map((section) => {
@@ -210,7 +300,7 @@ export const usePageData = (initialPageId?: string) => {
     setError(null)
 
     try {
-      const response = await fetch(`/api/pages/${currentPageId}`, {
+      const response = await fetch(`/api/pages/${savePageId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -220,26 +310,34 @@ export const usePageData = (initialPageId?: string) => {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        setError(data.error || 'Failed to save layout')
+        if (requestId === activeSaveRequestRef.current && currentPageIdRef.current === savePageId) {
+          setError(data.error || 'Failed to save layout')
+        }
         return false
       }
 
       const savedLayout = normalizeEditorLayout(data.page?.layout ?? validatedLayout, {
-        id: data.page?.id ?? currentPageId,
+        id: data.page?.id ?? savePageId,
         name: data.page?.name ?? validatedLayout.name,
         title: data.page?.title ?? validatedLayout.name,
       })
 
-      setLayout(savedLayout)
+      if (requestId === activeSaveRequestRef.current && currentPageIdRef.current === savePageId) {
+        setLayout(savedLayout)
+      }
       return true
     } catch (saveError) {
       console.error('Error saving layout:', saveError)
-      setError('Error saving layout')
+      if (requestId === activeSaveRequestRef.current && currentPageIdRef.current === savePageId) {
+        setError('Error saving layout')
+      }
       return false
     } finally {
-      setLoading(false)
+      if (requestId === activeSaveRequestRef.current) {
+        setLoading(false)
+      }
     }
-  }, [currentPageId])
+  }, [])
 
   const createPage = useCallback(async (name: string): Promise<Page | null> => {
     setLoading(true)
@@ -272,6 +370,7 @@ export const usePageData = (initialPageId?: string) => {
       }
 
       setPages((previousPages) => [...previousPages, newPage])
+      currentPageIdRef.current = newPage.id
       setCurrentPageId(newPage.id)
       setLayout(normalizeEditorLayout(data.page.layout, { id: newPage.id, name: newPage.name }))
       return newPage
@@ -284,7 +383,7 @@ export const usePageData = (initialPageId?: string) => {
     }
   }, [])
 
-  const deletePage = useCallback(async (pageId: string): Promise<boolean> => {
+  const deletePage = useCallback(async (pageId: string): Promise<{ success: boolean; error?: string }> => {
     setLoading(true)
     setError(null)
 
@@ -295,8 +394,9 @@ export const usePageData = (initialPageId?: string) => {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        setError(data.error || 'Failed to delete page')
-        return false
+        const message = data.error || 'Failed to delete page'
+        setError(message)
+        return { success: false, error: message }
       }
 
       const remainingPages = pages.filter((page) => page.id !== pageId)
@@ -304,15 +404,17 @@ export const usePageData = (initialPageId?: string) => {
 
       if (currentPageId === pageId) {
         const fallbackPage = remainingPages.find((page) => page.slug === 'home') || remainingPages[0] || null
+        currentPageIdRef.current = fallbackPage?.id || null
         setCurrentPageId(fallbackPage?.id || null)
         setLayout(emptyLayout(fallbackPage?.id || '', fallbackPage?.name || ''))
       }
 
-      return true
+      return { success: true }
     } catch (deleteError) {
       console.error('Error deleting page:', deleteError)
-      setError('Error deleting page')
-      return false
+      const message = 'Error deleting page'
+      setError(message)
+      return { success: false, error: message }
     } finally {
       setLoading(false)
     }
@@ -343,6 +445,65 @@ export const usePageData = (initialPageId?: string) => {
       console.error('Error updating page status:', disableError)
       setError('Error updating page status')
       return false
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const renamePage = useCallback(async (pageId: string, nextName: string): Promise<{ success: boolean; error?: string }> => {
+    const trimmedName = String(nextName || '').trim()
+    if (!trimmedName) {
+      return { success: false, error: 'Page name cannot be empty' }
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/pages/${pageId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: trimmedName,
+          title: trimmedName,
+        }),
+      })
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        const message = data.error || 'Failed to rename page'
+        setError(message)
+        return { success: false, error: message }
+      }
+
+      const resolvedName = data.page?.name || data.page?.title || trimmedName
+      setPages((previousPages) =>
+        previousPages.map((page) =>
+          String(page.id) === String(pageId)
+            ? {
+                ...page,
+                name: resolvedName,
+                title: data.page?.title || resolvedName,
+              }
+            : page,
+        ),
+      )
+
+      setLayout((previousLayout) =>
+        String(previousLayout?.id ?? '') === String(pageId)
+          ? {
+              ...previousLayout,
+              name: resolvedName,
+            }
+          : previousLayout,
+      )
+
+      return { success: true }
+    } catch (renameError) {
+      console.error('Error renaming page:', renameError)
+      const message = 'Error renaming page'
+      setError(message)
+      return { success: false, error: message }
     } finally {
       setLoading(false)
     }
@@ -379,6 +540,7 @@ export const usePageData = (initialPageId?: string) => {
     createPage,
     deletePage,
     disablePage,
+    renamePage,
     togglePageActive,
   }
 }

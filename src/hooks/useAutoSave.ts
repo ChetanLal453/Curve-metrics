@@ -32,6 +32,7 @@ export function useAutoSave<T>({
   const previousDataRef = useRef('')
   const latestDataRef = useRef(data)
   const latestOnSaveRef = useRef(onSave)
+  const wasEnabledRef = useRef(enabled)
   const serializedData = useMemo(() => JSON.stringify(data), [data])
 
   useEffect(() => {
@@ -43,6 +44,22 @@ export function useAutoSave<T>({
   }, [onSave])
 
   useEffect(() => {
+    if (enabled && !wasEnabledRef.current) {
+      // When autosave is re-enabled (e.g., after page switch hydration),
+      // take current state as baseline to avoid immediate stale saves.
+      previousDataRef.current = serializedData
+      setHasPendingChanges(false)
+    }
+    wasEnabledRef.current = enabled
+  }, [enabled, serializedData])
+
+  useEffect(() => {
+    // Prevent a pending debounce from the previous identity from saving into the new identity.
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current)
+      debounceTimeoutRef.current = null
+    }
+
     previousDataRef.current = serializedData
     latestDataRef.current = data
     setHasPendingChanges(false)

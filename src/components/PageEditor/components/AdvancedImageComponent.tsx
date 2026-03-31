@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import * as FaIcons from 'react-icons/fa'
 
 interface AdvancedImageComponentProps {
@@ -485,6 +485,7 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
   const [showLightboxModal, setShowLightboxModal] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [isEditor, setIsEditor] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const domImageProps = React.useMemo(
@@ -620,7 +621,14 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
       setUploadProgress(100)
 
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`)
+        let serverMessage = response.statusText
+        try {
+          const errorPayload = await response.json()
+          serverMessage = errorPayload?.error || errorPayload?.message || serverMessage
+        } catch {
+          // Ignore JSON parse errors; fallback to HTTP status text.
+        }
+        throw new Error(`Upload failed: ${serverMessage}`)
       }
 
       const data = await response.json()
@@ -891,6 +899,16 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
   }
 
   const shapeStyle = getShapeValue()
+  const previewBorder = 'var(--canvas-border2, rgba(255,255,255,0.13))'
+  const previewSurface = 'var(--canvas-surface2, #1a1d28)'
+  const previewMuted = 'var(--canvas-text3, #5a5f7a)'
+  const fallbackRadius = isEditor && shape === 'default' && borderRadius === 0 ? '10px' : shapeStyle.borderRadius
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      setIsEditor(Boolean(document.querySelector('.cm-page-editor')))
+    }
+  }, [])
 
   const containerStyle: React.CSSProperties = {
     display: 'inline-flex',
@@ -909,9 +927,11 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
     height: height === 'auto' ? (shape === 'circle' || shape === 'square' ? '100%' : undefined) : height,
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: shapeStyle.borderRadius,
+    borderRadius: fallbackRadius,
     clipPath: shapeStyle.clipPath,
     boxShadow: getShadowValue(),
+    border: isEditor ? `1px solid ${previewBorder}` : undefined,
+    background: isEditor ? previewSurface : undefined,
     cursor: showLightbox && src ? 'zoom-in' : 'pointer',
     aspectRatio: shapeStyle.aspectRatio,
     ...(shape === 'circle' && {
@@ -933,7 +953,7 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
     height: '100%',
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: shape === 'circle' ? '50%' : shapeStyle.borderRadius,
+    borderRadius: shape === 'circle' ? '50%' : fallbackRadius,
     clipPath: shapeStyle.clipPath,
     flex: 1,
   }
@@ -1050,6 +1070,157 @@ const AdvancedImageComponent: React.FC<AdvancedImageComponentProps> = ({
   }
 
   if (!src) {
+    if (isEditor) {
+      const previewContainerStyle: React.CSSProperties = {
+        ...containerStyle,
+        width: '100%',
+        maxWidth: '100%',
+        display: 'block',
+        position: 'relative',
+      }
+      const previewCardStyle: React.CSSProperties = {
+        borderRadius: '12px',
+        border: `1px solid var(--canvas-border, rgba(255,255,255,0.07))`,
+        overflow: 'hidden',
+        background: 'var(--canvas-surface, #13161e)',
+      }
+      const previewHeaderStyle: React.CSSProperties = {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        padding: '12px 16px',
+        background: previewSurface,
+        borderBottom: '1px solid var(--canvas-border, rgba(255,255,255,0.07))',
+        fontFamily: "'DM Sans', system-ui, sans-serif",
+      }
+      const previewBodyStyle: React.CSSProperties = {
+        padding: '28px 36px',
+        backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)',
+        backgroundSize: '20px 20px',
+      }
+
+      const previewDropStyle: React.CSSProperties = {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        width: '100%',
+        padding: '8px',
+        borderRadius: '12px',
+        border: dragOver ? '1px solid var(--canvas-accent, #7c6dfa)' : '1px solid transparent',
+        background: dragOver ? 'rgba(124,109,250,0.08)' : 'transparent',
+        transition: 'all 0.2s ease',
+      }
+
+      const previewBoxBase: React.CSSProperties = {
+        borderRadius: '10px',
+        overflow: 'hidden',
+        border: `1px solid ${previewBorder}`,
+        position: 'relative',
+        background: previewSurface,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+        gap: '8px',
+      }
+
+      const previewIcon = (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+      )
+
+      return (
+        <div className={`${className}`} style={previewContainerStyle} onClick={onSelect}>
+          <div style={previewCardStyle}>
+            <div style={previewHeaderStyle}>
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: 'var(--canvas-accent2, #a594ff)',
+                  background: 'var(--canvas-accentbg, rgba(124,109,250,0.12))',
+                  border: '1px solid rgba(124,109,250,0.2)',
+                  padding: '2px 8px',
+                  borderRadius: '20px',
+                }}
+              >
+                Content
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--canvas-text, #e8eaf0)' }}>Image</span>
+              <span style={{ marginLeft: 'auto', fontSize: '11.5px', color: previewMuted, fontFamily: "'DM Mono', monospace" }}>
+                responsive · lazy loaded
+              </span>
+            </div>
+
+            <div style={previewBodyStyle}>
+              <div
+                style={previewDropStyle}
+                onClick={handleUploadClick}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+              >
+                <div style={{ ...previewBoxBase, width: '100%', minHeight: '220px' }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'radial-gradient(circle at 40% 40%, rgba(124,109,250,0.15), transparent 70%)',
+                    }}
+                  />
+                  <div style={{ color: previewMuted, zIndex: 1 }}>{React.cloneElement(previewIcon, { width: 32, height: 32, strokeWidth: 1 })}</div>
+                  <div style={{ fontSize: '11px', color: previewMuted, zIndex: 1 }}>Hero Image</div>
+                </div>
+
+                <div style={{ fontSize: '11px', color: previewMuted, textAlign: 'center' }}>
+                  Drag & drop or click to upload
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {isUploading && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '12px',
+                color: 'white',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FaIcons.FaSpinner className="animate-spin" />
+                <span>Uploading to backend...</span>
+              </div>
+              {uploadProgress > 0 && (
+                <div style={{ width: '80%', textAlign: 'center' }}>
+                  <div>{uploadProgress}%</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+        </div>
+      )
+    }
+
     return (
       <div className={`${className}`} style={containerStyle}>
         <div
